@@ -3,8 +3,7 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
-  base: '/wordfuse/', // Make sure this matches your repo name exactly
+  base: '/wordfuse/', // 👈 REPLACE 'wordfuse' with your actual repo name
   plugins: [react(), tailwindcss()],
 })
-
 
