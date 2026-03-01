@@ -77,6 +77,19 @@ const css = `
                       radial-gradient(ellipse at 80% 100%, #1a2840 0%, transparent 60%);
   }
 
+  .wl-header-wrap {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    padding: 8px 0 12px;
+    margin-bottom: 20px;
+    background: linear-gradient(to bottom, rgba(15, 14, 23, 0.96), rgba(15, 14, 23, 0.84), rgba(15, 14, 23, 0));
+    backdrop-filter: blur(6px);
+  }
+
   /* HEADER */
   .wl-header {
     width: 100%;
@@ -84,7 +97,51 @@ const css = `
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 32px;
+    margin-bottom: 0;
+  }
+  .wl-calendar-btn {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 14px;
+    transition: border-color 0.2s, color 0.2s;
+  }
+  .wl-calendar-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .wl-archive-popover {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 10px);
+    width: 240px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  }
+  .wl-archive-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+  }
+  .wl-date-input {
+    width: 100%;
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-family: var(--font-mono);
+    font-size: 12px;
   }
   .wl-logo {
     font-family: var(--font-display);
@@ -516,6 +573,39 @@ const css = `
     to   { transform: scale(1);   opacity: 1; }
   }
 
+  .wl-letter-probe {
+    display: flex;
+    gap: 5px;
+    margin-top: 8px;
+    align-items: center;
+  }
+  .wl-letter-probe-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-right: 4px;
+  }
+  .wl-letter-probe-cell {
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-display);
+    font-size: 13px;
+    font-weight: 700;
+    color: transparent;
+  }
+  .wl-letter-probe-cell.hit {
+    border-color: var(--green);
+    color: var(--green);
+  }
+
   /* COPIED TOAST */
   .wl-toast {
     position: fixed;
@@ -592,8 +682,12 @@ create table game_results (
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export default function WordLinkGame() {
+  const today = getTodayEST();
   const [puzzle, setPuzzle] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [activeDate, setActiveDate] = useState(today);
+  const [showArchivePicker, setShowArchivePicker] = useState(false);
+  const [archiveMsg, setArchiveMsg] = useState("");
   const [guesses, setGuesses] = useState(["", "", "", ""]);
   const [completed, setCompleted] = useState([false, false, false, false]);
   const [wrongGuesses, setWrongGuesses] = useState(0);
@@ -626,21 +720,39 @@ export default function WordLinkGame() {
     return () => window.removeEventListener("keydown", handler);
   }, [showHelp, showCopied, screen]);
 
+  const resetBoard = () => {
+    setGuesses(["", "", "", ""]);
+    setCompleted([false, false, false, false]);
+    setWrongGuesses(0);
+    setTimeLeft(TOTAL_TIME);
+    setGameStatus("playing");
+    setShakingRound(null);
+    setErrorMsgs(["", "", "", ""]);
+    setHintLetters(["", "", "", ""]);
+    setWrongPerRound([0, 0, 0, 0]);
+  };
+
   // ── Load puzzle ──
   useEffect(() => {
     (async () => {
-      const today = getTodayEST();
+      setLoading(true);
+      setArchiveMsg("");
       let p = null;
       try {
         const { data, error } = await supabase
           .from("puzzles")
           .select("*")
-          .eq("puzzle_date", today)
+          .eq("puzzle_date", activeDate)
           .single();
         if (!error && data) p = data;
       } catch (_) {}
 
-      if (!p) p = { ...FALLBACK_PUZZLE, puzzle_date: today };
+      if (!p) {
+        p = { ...FALLBACK_PUZZLE, puzzle_date: activeDate };
+        setArchiveMsg(activeDate === today
+          ? "Today's live puzzle is unavailable — using practice puzzle."
+          : "No archived puzzle found for this date — showing practice puzzle.");
+      }
 
       // Normalise words to uppercase
       p = {
@@ -651,9 +763,11 @@ export default function WordLinkGame() {
         })),
       };
       setPuzzle(p);
+      resetBoard();
+      setScreen("game");
 
-      // Check if user already played today
-      const savedResult = localStorage.getItem(`wl_played_${today}`);
+      // Check if user already played today's puzzle
+      const savedResult = activeDate === today ? localStorage.getItem(`wl_played_${today}`) : null;
       if (savedResult) {
         const saved = JSON.parse(savedResult);
         setCompleted(saved.completed);
@@ -667,7 +781,7 @@ export default function WordLinkGame() {
       setLoading(false);
       loadStats();
     })();
-  }, []);
+  }, [activeDate, today]);
 
   // ── Load stats ──
   const loadStats = async () => {
@@ -706,7 +820,6 @@ export default function WordLinkGame() {
     setTimeout(() => setScreen("results"), 600);
 
     // Persist result so user can't replay today
-    const today = getTodayEST();
     const snapshot = {
       completed,
       wrongGuesses,
@@ -714,7 +827,7 @@ export default function WordLinkGame() {
       hintLetters,
       gameStatus: status,
     };
-    localStorage.setItem(`wl_played_${today}`, JSON.stringify(snapshot));
+    if (activeDate === today) localStorage.setItem(`wl_played_${today}`, JSON.stringify(snapshot));
 
     const uid = getUserId();
     const timeTaken = TOTAL_TIME - timeLeft;
@@ -742,7 +855,7 @@ export default function WordLinkGame() {
         wrong_guesses: wrongGuesses,
       });
     } catch (_) {}
-  }, [timeLeft, wrongGuesses, puzzle]);
+  }, [timeLeft, wrongGuesses, puzzle, activeDate, today, completed, hintLetters]);
 
   // ── Submit guess ──
   const submitGuess = useCallback((roundIdx) => {
@@ -796,6 +909,12 @@ export default function WordLinkGame() {
   const timerPct = (timeLeft / TOTAL_TIME) * 100;
   const isLow = timeLeft < 30;
   const wrongDanger = wrongGuesses >= MAX_WRONG - 1;
+  const buildProbe = (roundIdx) => {
+    const rawGuess = guesses[roundIdx].trim().toLowerCase();
+    if (!rawGuess || completed[roundIdx] || gameStatus !== "playing") return [];
+    const answer = puzzle.rounds[roundIdx].answer.toLowerCase();
+    return answer.split("").map((char, idx) => (rawGuess[idx] === char ? char.toUpperCase() : ""));
+  };
 
   // ── SHARE ──
   const shareResults = () => {
@@ -830,31 +949,56 @@ export default function WordLinkGame() {
       <div className="wl-root">
 
         {/* HEADER */}
-        <header className="wl-header">
-          <div className="wl-logo">Word<span>.</span>Link</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div className="wl-date">{puzzle.puzzle_date}</div>
-            <button
-              onClick={() => setShowHelp(true)}
-              style={{
-                width: 30, height: 30,
-                borderRadius: "50%",
-                background: "var(--surface2)",
-                border: "1px solid var(--border)",
-                color: "var(--text-muted)",
-                fontFamily: "var(--font-mono)",
-                fontSize: 14,
-                cursor: "pointer",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                flexShrink: 0,
-                transition: "border-color 0.2s, color 0.2s",
-              }}
-              onMouseOver={e => { e.currentTarget.style.borderColor = "var(--accent)"; e.currentTarget.style.color = "var(--accent)"; }}
-              onMouseOut={e => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.color = "var(--text-muted)"; }}
-              aria-label="How to play"
-            >?</button>
+        <div className="wl-header-wrap">
+          <header className="wl-header">
+            <div className="wl-logo">Word<span>.</span>Link</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, position: "relative" }}>
+              <div className="wl-date">{puzzle.puzzle_date}</div>
+              <button className="wl-calendar-btn" onClick={() => setShowArchivePicker((v) => !v)} aria-label="Open archived puzzle calendar">📅</button>
+              <button
+                onClick={() => setShowHelp(true)}
+                style={{
+                  width: 30, height: 30,
+                  borderRadius: "50%",
+                  background: "var(--surface2)",
+                  border: "1px solid var(--border)",
+                  color: "var(--text-muted)",
+                  fontFamily: "var(--font-mono)",
+                  fontSize: 14,
+                  cursor: "pointer",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  flexShrink: 0,
+                  transition: "border-color 0.2s, color 0.2s",
+                }}
+                onMouseOver={e => { e.currentTarget.style.borderColor = "var(--accent)"; e.currentTarget.style.color = "var(--accent)"; }}
+                onMouseOut={e => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.color = "var(--text-muted)"; }}
+                aria-label="How to play"
+              >?</button>
+              {showArchivePicker && (
+                <div className="wl-archive-popover">
+                  <div className="wl-archive-label">Play archived puzzle</div>
+                  <input
+                    className="wl-date-input"
+                    type="date"
+                    max={today}
+                    value={activeDate}
+                    onChange={(e) => {
+                      if (!e.target.value) return;
+                      setActiveDate(e.target.value);
+                      setShowArchivePicker(false);
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+          </header>
+        </div>
+
+        {archiveMsg && (
+          <div className="wl-date" style={{ marginBottom: 12, maxWidth: 560, width: "100%", color: "var(--accent2)" }}>
+            {archiveMsg}
           </div>
-        </header>
+        )}
 
         {/* HOME SCREEN */}
         {screen === "home" && (
@@ -990,6 +1134,14 @@ export default function WordLinkGame() {
                       >Submit</button>
                     </div>
                     <div className="wl-error-msg">{errorMsgs[idx]}</div>
+                    {buildProbe(idx).length > 0 && (
+                      <div className="wl-letter-probe">
+                        <span className="wl-letter-probe-label">Letters</span>
+                        {buildProbe(idx).map((char, li) => (
+                          <div key={li} className={`wl-letter-probe-cell ${char ? "hit" : ""}`}>{char || "·"}</div>
+                        ))}
+                      </div>
+                    )}
                     {hintLetters[idx] && (
                       <div className="wl-hint">
                         <span className="wl-hint-label">Hint</span>
