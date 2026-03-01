@@ -337,23 +337,36 @@ const css = `
   .wl-input-row {
     display: flex;
     gap: 8px;
-    align-items: stretch;
+    flex-wrap: wrap;
   }
-  .wl-input {
-    flex: 1;
+  .wl-letter-input {
+    width: 42px;
+    height: 42px;
     background: var(--surface2);
     border: 1px solid var(--border);
     border-radius: 10px;
-    padding: 10px 14px;
     font-family: var(--font-mono);
-    font-size: 15px;
+    font-size: 18px;
     color: var(--text);
+    text-transform: uppercase;
+    text-align: center;
     outline: none;
-    transition: border-color 0.2s;
-    text-transform: lowercase;
+    transition: border-color 0.2s, transform 0.1s, background 0.2s, color 0.2s;
   }
-  .wl-input::placeholder { color: var(--text-muted); }
-  .wl-input:focus { border-color: var(--accent); }
+  .wl-letter-input:focus {
+    border-color: var(--accent);
+    transform: translateY(-1px);
+  }
+  .wl-letter-input.gold {
+    background: color-mix(in srgb, var(--accent) 22%, var(--surface2));
+    border-color: var(--accent);
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .wl-letter-input:disabled {
+    opacity: 0.8;
+    cursor: not-allowed;
+  }
 
   .wl-submit {
     background: var(--accent);
@@ -763,7 +776,7 @@ export default function WordLinkGame() {
   const [hintLetters, setHintLetters] = useState(["", "", "", ""]);
   const [wrongPerRound, setWrongPerRound] = useState([0, 0, 0, 0]);
   const timerRef = useRef(null);
-  const inputRefs = useRef([]);
+  const letterInputRefs = useRef([[], [], [], []]);
   const gameStatusRef = useRef("playing");
 
   // Keep ref in sync
@@ -791,7 +804,12 @@ export default function WordLinkGame() {
     setErrorMsgs(["", "", "", ""]);
     setHintLetters(["", "", "", ""]);
     setWrongPerRound([0, 0, 0, 0]);
+    letterInputRefs.current = [[], [], [], []];
   };
+
+  const focusLetter = useCallback((roundIdx, letterIdx) => {
+    letterInputRefs.current[roundIdx]?.[letterIdx]?.focus();
+  }, []);
 
   const resetPuzzleProgress = () => {
     localStorage.removeItem(`wl_played_${activeDate}`);
@@ -947,11 +965,18 @@ export default function WordLinkGame() {
     const guess = guesses[roundIdx].trim().toLowerCase();
     const answer = puzzle.rounds[roundIdx].answer.toLowerCase();
 
+    if (guess.length !== answer.length) {
+      setErrorMsgs((e) => e.map((m, i) => (i === roundIdx ? `Enter all ${answer.length} letters` : m)));
+      return;
+    }
+
     if (guess === answer) {
       const newCompleted = completed.map((c, i) => (i === roundIdx ? true : c));
       setCompleted(newCompleted);
       setErrorMsgs((e) => e.map((m, i) => (i === roundIdx ? "" : m)));
       setHintLetters((h) => h.map((l, i) => (i === roundIdx ? "" : l)));
+      const nextRound = newCompleted.findIndex((isDone) => !isDone);
+      if (nextRound !== -1) setTimeout(() => focusLetter(nextRound, 0), 10);
       if (newCompleted.every(Boolean)) triggerEndGame("won");
     } else {
       // Shake
@@ -972,7 +997,9 @@ export default function WordLinkGame() {
       if (hintChar && !isLosingGuess) {
         const revealed = answer.slice(0, lettersRevealed);
         setHintLetters((h) => h.map((l, i) => (i === roundIdx ? revealed.toUpperCase() : l)));
+        setGuesses((g) => g.map((value, i) => (i === roundIdx ? revealed : value)));
         setErrorMsgs((e) => e.map((m, i) => (i === roundIdx ? `Hint: starts with "${revealed.toUpperCase()}"` : m)));
+        setTimeout(() => focusLetter(roundIdx, Math.min(revealed.length, answer.length - 1)), 10);
       } else if (!isLosingGuess) {
         setErrorMsgs((e) => e.map((m, i) => (i === roundIdx ? "Not quite — try again" : m)));
       }
@@ -983,10 +1010,62 @@ export default function WordLinkGame() {
         return next;
       });
     }
-  }, [gameStatus, completed, guesses, puzzle, triggerEndGame, wrongGuesses, wrongPerRound]);
+  }, [gameStatus, completed, guesses, puzzle, triggerEndGame, wrongGuesses, wrongPerRound, focusLetter]);
 
-  const handleKey = (e, idx) => {
-    if (e.key === "Enter") submitGuess(idx);
+  const handleLetterChange = (roundIdx, letterIdx, rawValue) => {
+    const answerLen = puzzle.rounds[roundIdx].answer.length;
+    const lockedCount = hintLetters[roundIdx].length;
+    if (letterIdx < lockedCount) return;
+
+    const chars = guesses[roundIdx].slice(0, answerLen).split("");
+    if (rawValue.length > 1) {
+      let writeIdx = letterIdx;
+      for (const token of rawValue.toLowerCase()) {
+        if (!/[a-z]/.test(token)) continue;
+        if (writeIdx >= answerLen) break;
+        if (writeIdx < lockedCount) {
+          writeIdx = lockedCount;
+          if (writeIdx >= answerLen) break;
+        }
+        chars[writeIdx] = token;
+        writeIdx += 1;
+      }
+      const nextGuess = chars.join("");
+      setGuesses((g) => g.map((value, i) => (i === roundIdx ? nextGuess : value)));
+      if (errorMsgs[roundIdx]) setErrorMsgs((em) => em.map((m, i) => (i === roundIdx ? "" : m)));
+      if (writeIdx < answerLen) focusLetter(roundIdx, writeIdx);
+      return;
+    }
+
+    const value = rawValue.toLowerCase();
+    chars[letterIdx] = /[a-z]/.test(value) ? value : "";
+    const nextGuess = chars.join("");
+    setGuesses((g) => g.map((guess, i) => (i === roundIdx ? nextGuess : guess)));
+    if (errorMsgs[roundIdx]) setErrorMsgs((em) => em.map((m, i) => (i === roundIdx ? "" : m)));
+    if (value && letterIdx < answerLen - 1) focusLetter(roundIdx, letterIdx + 1);
+  };
+
+  const handleLetterKey = (e, roundIdx, letterIdx) => {
+    const lockedCount = hintLetters[roundIdx].length;
+    if (e.key === "Enter") {
+      submitGuess(roundIdx);
+      return;
+    }
+    if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      focusLetter(roundIdx, Math.max(lockedCount, letterIdx - 1));
+      return;
+    }
+    if (e.key === "ArrowRight") {
+      e.preventDefault();
+      const maxIdx = puzzle.rounds[roundIdx].answer.length - 1;
+      focusLetter(roundIdx, Math.min(maxIdx, letterIdx + 1));
+      return;
+    }
+    if (e.key === "Backspace" && !guesses[roundIdx][letterIdx] && letterIdx > lockedCount) {
+      e.preventDefault();
+      focusLetter(roundIdx, letterIdx - 1);
+    }
   };
 
   const timerPct = (timeLeft / TOTAL_TIME) * 100;
@@ -1205,27 +1284,36 @@ export default function WordLinkGame() {
                 ) : (
                   <>
                     <div className="wl-input-row">
-                      <input
-                        ref={(el) => (inputRefs.current[idx] = el)}
-                        className="wl-input"
-                        type="text"
-                        placeholder="linking word…"
-                        value={guesses[idx]}
-                        onChange={(e) => {
-                          const next = [...guesses];
-                          next[idx] = e.target.value;
-                          setGuesses(next);
-                          if (errorMsgs[idx]) setErrorMsgs((em) => em.map((m, i) => (i === idx ? "" : m)));
-                        }}
-                        onKeyDown={(e) => handleKey(e, idx)}
-                        disabled={gameStatus !== "playing"}
-                        autoComplete="off"
-                        autoCapitalize="none"
-                      />
+                      {Array.from({ length: round.answer.length }).map((_, letterIdx) => {
+                        const guessLetters = guesses[idx].slice(0, round.answer.length).split("");
+                        const letterValue = (guessLetters[letterIdx] || "").toUpperCase();
+                        const lockedCount = hintLetters[idx].length;
+                        const isLockedGold = letterIdx < lockedCount;
+                        return (
+                          <input
+                            key={letterIdx}
+                            ref={(el) => {
+                              if (!letterInputRefs.current[idx]) letterInputRefs.current[idx] = [];
+                              letterInputRefs.current[idx][letterIdx] = el;
+                            }}
+                            className={`wl-letter-input ${isLockedGold ? "gold" : ""}`}
+                            type="text"
+                            inputMode="text"
+                            maxLength={1}
+                            value={isLockedGold ? hintLetters[idx][letterIdx] || "" : letterValue}
+                            onChange={(e) => handleLetterChange(idx, letterIdx, e.target.value)}
+                            onKeyDown={(e) => handleLetterKey(e, idx, letterIdx)}
+                            disabled={gameStatus !== "playing" || isLockedGold}
+                            autoComplete="off"
+                            autoCapitalize="none"
+                            aria-label={`Round ${idx + 1} letter ${letterIdx + 1}`}
+                          />
+                        );
+                      })}
                       <button
                         className="wl-submit"
                         onClick={() => submitGuess(idx)}
-                        disabled={!guesses[idx].trim()}
+                        disabled={guesses[idx].trim().length !== round.answer.length}
                       >Submit</button>
                     </div>
                     <div className="wl-error-msg">{errorMsgs[idx]}</div>
