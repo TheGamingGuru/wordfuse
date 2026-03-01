@@ -9,7 +9,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const TOTAL_TIME = 120;
 const MAX_WRONG = 4;
 
-// ─── FALLBACK PUZZLE (used if Supabase isn't connected yet) ──────────────────
+// ─── FALLBACK PUZZLE ─────────────────────────────────────────────────────────
 const FALLBACK_PUZZLE = {
   puzzle_date: "2024-01-01",
   rounds: [
@@ -21,9 +21,24 @@ const FALLBACK_PUZZLE = {
 };
 
 // ─── UTILS ───────────────────────────────────────────────────────────────────
+
+// Always called fresh — never cached at module level.
 const getTodayEST = () => {
   const est = new Date().toLocaleString("en-US", { timeZone: "America/New_York" });
   return new Date(est).toISOString().split("T")[0];
+};
+
+// How many milliseconds until the next EST midnight.
+const msUntilEstMidnight = () => {
+  const nowUtc = new Date();
+  // Current time expressed as an EST wall-clock date
+  const estString = nowUtc.toLocaleString("en-US", { timeZone: "America/New_York" });
+  const estNow = new Date(estString);
+  // Roll forward to 00:00:00.000 the next day
+  const estMidnight = new Date(estNow);
+  estMidnight.setHours(24, 0, 0, 0);
+  // Real milliseconds between now and that moment
+  return estMidnight - estNow;
 };
 
 const formatTime = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
@@ -59,506 +74,125 @@ const css = `
   }
 
   body { background: var(--bg); color: var(--text); font-family: var(--font-body); }
-
-  html, body, #root {
-    width: 100%;
-    min-height: 100vh;
-  }
+  html, body, #root { width: 100%; min-height: 100vh; }
 
   .wl-root {
-    min-height: 100vh;
-    width: 100%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
+    min-height: 100vh; width: 100%;
+    display: flex; flex-direction: column; align-items: center;
     padding: 24px 16px 48px;
     background: var(--bg);
     background-image: radial-gradient(ellipse at 20% 0%, #1e1540 0%, transparent 60%),
                       radial-gradient(ellipse at 80% 100%, #1a2840 0%, transparent 60%);
   }
 
-  /* HEADER */
   .wl-header {
-    width: 100%;
-    max-width: 560px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+    width: 100%; max-width: 560px;
+    display: flex; justify-content: space-between; align-items: center;
     margin-bottom: 32px;
   }
-  .wl-logo {
-    font-family: var(--font-display);
-    font-size: 28px;
-    font-weight: 900;
-    letter-spacing: -0.5px;
-    color: var(--text);
-  }
+  .wl-logo { font-family: var(--font-display); font-size: 28px; font-weight: 900; letter-spacing: -0.5px; color: var(--text); }
   .wl-logo span { color: var(--accent); }
-  .wl-date {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--text-muted);
-    letter-spacing: 1px;
-    text-transform: uppercase;
-  }
+  .wl-date { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); letter-spacing: 1px; text-transform: uppercase; }
 
-  /* HUD */
-  .wl-hud {
-    width: 100%;
-    max-width: 560px;
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 10px;
-    margin-bottom: 28px;
-  }
-  .wl-hud-cell {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 12px 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-  .wl-hud-label {
-    font-family: var(--font-mono);
-    font-size: 9px;
-    letter-spacing: 1.5px;
-    text-transform: uppercase;
-    color: var(--text-muted);
-  }
-  .wl-hud-value {
-    font-family: var(--font-mono);
-    font-size: 24px;
-    font-weight: 500;
-    color: var(--text);
-    line-height: 1;
-  }
+  .wl-hud { width: 100%; max-width: 560px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 28px; }
+  .wl-hud-cell { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; display: flex; flex-direction: column; gap: 2px; }
+  .wl-hud-label { font-family: var(--font-mono); font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-muted); }
+  .wl-hud-value { font-family: var(--font-mono); font-size: 24px; font-weight: 500; color: var(--text); line-height: 1; }
   .wl-hud-value.warning { color: var(--accent); }
   .wl-hud-value.danger  { color: var(--accent2); }
 
-  /* TIMER BAR */
-  .wl-timer-bar-wrap {
-    width: 100%;
-    max-width: 560px;
-    height: 3px;
-    background: var(--border);
-    border-radius: 2px;
-    margin-bottom: 28px;
-    overflow: hidden;
-  }
-  .wl-timer-bar {
-    height: 100%;
-    background: var(--accent);
-    border-radius: 2px;
-    transition: width 1s linear, background 0.4s;
-  }
+  .wl-timer-bar-wrap { width: 100%; max-width: 560px; height: 3px; background: var(--border); border-radius: 2px; margin-bottom: 28px; overflow: hidden; }
+  .wl-timer-bar { height: 100%; background: var(--accent); border-radius: 2px; transition: width 1s linear, background 0.4s; }
   .wl-timer-bar.low { background: var(--accent2); }
 
-  /* ROUNDS */
-  .wl-rounds {
-    width: 100%;
-    max-width: 560px;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-  }
+  .wl-rounds { width: 100%; max-width: 560px; display: flex; flex-direction: column; gap: 14px; }
 
-  .wl-round {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    padding: 20px;
-    transition: border-color 0.3s, box-shadow 0.3s;
-  }
-  .wl-round.solved {
-    border-color: var(--green);
-    box-shadow: 0 0 0 1px var(--green), 0 4px 24px rgba(82,214,138,0.08);
-  }
-  .wl-round.shaking {
-    animation: shake 0.45s cubic-bezier(.36,.07,.19,.97) both;
-  }
+  .wl-round { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 20px; transition: border-color 0.3s, box-shadow 0.3s; }
+  .wl-round.solved { border-color: var(--green); box-shadow: 0 0 0 1px var(--green), 0 4px 24px rgba(82,214,138,0.08); }
+  .wl-round.shaking { animation: shake 0.45s cubic-bezier(.36,.07,.19,.97) both; }
 
   @keyframes shake {
     0%,100% { transform: translateX(0); }
-    15%      { transform: translateX(-6px); }
-    30%      { transform: translateX(6px); }
-    45%      { transform: translateX(-5px); }
-    60%      { transform: translateX(5px); }
-    75%      { transform: translateX(-3px); }
-    90%      { transform: translateX(3px); }
+    15%     { transform: translateX(-6px); }
+    30%     { transform: translateX(6px); }
+    45%     { transform: translateX(-5px); }
+    60%     { transform: translateX(5px); }
+    75%     { transform: translateX(-3px); }
+    90%     { transform: translateX(3px); }
   }
 
-  .wl-round-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 14px;
-  }
-  .wl-round-num {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    color: var(--text-muted);
-  }
-  .wl-round-solved-badge {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: 1px;
-    color: var(--green);
-    text-transform: uppercase;
-  }
+  .wl-round-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .wl-round-num { font-family: var(--font-mono); font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-muted); }
+  .wl-round-solved-badge { font-family: var(--font-mono); font-size: 10px; letter-spacing: 1px; color: var(--green); text-transform: uppercase; }
 
-  .wl-words {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
-    margin-bottom: 14px;
-  }
-  .wl-word {
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 12px 8px;
-    text-align: center;
-    font-family: var(--font-display);
-    font-size: 15px;
-    font-weight: 700;
-    letter-spacing: 1.5px;
-    color: var(--text);
-    text-transform: uppercase;
-  }
+  .wl-words { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
+  .wl-word { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 8px; text-align: center; font-family: var(--font-display); font-size: 15px; font-weight: 700; letter-spacing: 1.5px; color: var(--text); text-transform: uppercase; }
 
-  .wl-input-row {
-    display: flex;
-    gap: 8px;
-    align-items: stretch;
-  }
-  .wl-input {
-    flex: 1;
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 10px 14px;
-    font-family: var(--font-mono);
-    font-size: 15px;
-    color: var(--text);
-    outline: none;
-    transition: border-color 0.2s;
-    text-transform: lowercase;
-  }
+  .wl-input-row { display: flex; gap: 8px; align-items: stretch; }
+  .wl-input { flex: 1; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; font-family: var(--font-mono); font-size: 15px; color: var(--text); outline: none; transition: border-color 0.2s; text-transform: lowercase; }
   .wl-input::placeholder { color: var(--text-muted); }
   .wl-input:focus { border-color: var(--accent); }
 
-  .wl-submit {
-    background: var(--accent);
-    color: var(--bg);
-    border: none;
-    border-radius: 10px;
-    padding: 10px 18px;
-    font-family: var(--font-body);
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    letter-spacing: 0.3px;
-    transition: opacity 0.15s, transform 0.1s;
-    white-space: nowrap;
-  }
+  .wl-submit { background: var(--accent); color: var(--bg); border: none; border-radius: 10px; padding: 10px 18px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; letter-spacing: 0.3px; transition: opacity 0.15s, transform 0.1s; white-space: nowrap; }
   .wl-submit:hover:not(:disabled) { opacity: 0.88; transform: scale(0.98); }
   .wl-submit:disabled { opacity: 0.3; cursor: not-allowed; }
 
-  .wl-error-msg {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--accent2);
-    margin-top: 8px;
-    letter-spacing: 0.5px;
-    min-height: 16px;
-  }
+  .wl-error-msg { font-family: var(--font-mono); font-size: 11px; color: var(--accent2); margin-top: 8px; letter-spacing: 0.5px; min-height: 16px; }
 
-  .wl-answer-reveal {
-    text-align: center;
-    padding: 10px;
-    font-family: var(--font-display);
-    font-size: 20px;
-    font-weight: 700;
-    letter-spacing: 3px;
-    color: var(--green);
-    text-transform: uppercase;
-  }
-  .wl-answer-reveal.missed {
-    color: var(--accent2);
-  }
+  .wl-answer-reveal { text-align: center; padding: 10px; font-family: var(--font-display); font-size: 20px; font-weight: 700; letter-spacing: 3px; color: var(--green); text-transform: uppercase; }
+  .wl-answer-reveal.missed { color: var(--accent2); }
 
-  /* MODAL OVERLAY */
-  .wl-overlay {
-    position: fixed; inset: 0;
-    background: rgba(10,9,20,0.82);
-    backdrop-filter: blur(6px);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 100;
-    padding: 20px;
-    animation: fadeIn 0.25s ease;
-  }
+  .wl-overlay { position: fixed; inset: 0; background: rgba(10,9,20,0.82); backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 20px; animation: fadeIn 0.25s ease; }
   @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-  .wl-modal {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 20px;
-    padding: 32px 28px;
-    max-width: 420px;
-    width: 100%;
-    animation: slideUp 0.3s cubic-bezier(0.22,1,0.36,1);
-  }
-  @keyframes slideUp {
-    from { transform: translateY(20px); opacity: 0; }
-    to   { transform: translateY(0);    opacity: 1; }
-  }
+  .wl-modal { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 32px 28px; max-width: 420px; width: 100%; animation: slideUp 0.3s cubic-bezier(0.22,1,0.36,1); }
+  @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
-  .wl-modal-title {
-    font-family: var(--font-display);
-    font-size: 32px;
-    font-weight: 900;
-    margin-bottom: 6px;
-    line-height: 1.1;
-  }
-  .wl-modal-sub {
-    font-size: 14px;
-    color: var(--text-muted);
-    margin-bottom: 24px;
-  }
+  .wl-modal-title { font-family: var(--font-display); font-size: 32px; font-weight: 900; margin-bottom: 6px; line-height: 1.1; }
+  .wl-modal-sub { font-size: 14px; color: var(--text-muted); margin-bottom: 24px; }
 
-  /* HOW TO PLAY */
-  .wl-howto-example {
-    background: var(--surface2);
-    border-radius: 10px;
-    padding: 14px;
-    margin-bottom: 18px;
-  }
-  .wl-howto-example p {
-    font-family: var(--font-mono);
-    font-size: 12px;
-    color: var(--text-muted);
-    margin-bottom: 6px;
-  }
-  .wl-howto-example .ex-words {
-    display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px;
-  }
-  .wl-howto-example .ex-word {
-    background: var(--border);
-    border-radius: 6px;
-    padding: 4px 10px;
-    font-family: var(--font-display);
-    font-size: 13px;
-    font-weight: 700;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-  }
-  .wl-howto-example .ex-answer {
-    font-family: var(--font-mono);
-    font-size: 13px;
-    color: var(--accent);
-  }
+  .wl-howto-example { background: var(--surface2); border-radius: 10px; padding: 14px; margin-bottom: 18px; }
+  .wl-howto-example p { font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+  .wl-howto-example .ex-words { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
+  .wl-howto-example .ex-word { background: var(--border); border-radius: 6px; padding: 4px 10px; font-family: var(--font-display); font-size: 13px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+  .wl-howto-example .ex-answer { font-family: var(--font-mono); font-size: 13px; color: var(--accent); }
 
-  .wl-rules {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin-bottom: 24px;
-  }
-  .wl-rule {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 13px;
-    color: var(--text-muted);
-  }
-  .wl-rule-icon {
-    width: 28px; height: 28px;
-    background: var(--surface2);
-    border-radius: 8px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 14px;
-    flex-shrink: 0;
-  }
+  .wl-rules { display: flex; flex-direction: column; gap: 8px; margin-bottom: 24px; }
+  .wl-rule { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-muted); }
+  .wl-rule-icon { width: 28px; height: 28px; background: var(--surface2); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
 
-  /* RESULTS */
-  .wl-result-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-    margin-bottom: 20px;
-  }
-  .wl-result-cell {
-    background: var(--surface2);
-    border-radius: 10px;
-    padding: 14px 12px;
-    text-align: center;
-  }
-  .wl-result-val {
-    font-family: var(--font-mono);
-    font-size: 26px;
-    font-weight: 500;
-    color: var(--text);
-    margin-bottom: 2px;
-  }
-  .wl-result-label {
-    font-family: var(--font-mono);
-    font-size: 9px;
-    letter-spacing: 1.5px;
-    text-transform: uppercase;
-    color: var(--text-muted);
-  }
+  .wl-result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+  .wl-result-cell { background: var(--surface2); border-radius: 10px; padding: 14px 12px; text-align: center; }
+  .wl-result-val { font-family: var(--font-mono); font-size: 26px; font-weight: 500; color: var(--text); margin-bottom: 2px; }
+  .wl-result-label { font-family: var(--font-mono); font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-muted); }
 
-  .wl-answer-list {
-    background: var(--surface2);
-    border-radius: 10px;
-    padding: 14px;
-    margin-bottom: 20px;
-  }
-  .wl-answer-list-title {
-    font-family: var(--font-mono);
-    font-size: 9px;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    color: var(--text-muted);
-    margin-bottom: 10px;
-  }
-  .wl-answer-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 6px 0;
-    border-bottom: 1px solid var(--border);
-    font-size: 13px;
-  }
+  .wl-answer-list { background: var(--surface2); border-radius: 10px; padding: 14px; margin-bottom: 20px; }
+  .wl-answer-list-title { font-family: var(--font-mono); font-size: 9px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 10px; }
+  .wl-answer-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
   .wl-answer-row:last-child { border-bottom: none; }
   .wl-answer-row-words { color: var(--text-muted); font-size: 12px; }
-  .wl-answer-row-ans {
-    font-family: var(--font-mono);
-    font-size: 13px;
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-  }
+  .wl-answer-row-ans { font-family: var(--font-mono); font-size: 13px; font-weight: 500; text-transform: uppercase; letter-spacing: 1px; }
   .wl-answer-row-ans.correct { color: var(--green); }
   .wl-answer-row-ans.missed  { color: var(--accent2); }
 
-  /* BUTTONS */
-  .wl-btn {
-    width: 100%;
-    padding: 14px;
-    border-radius: 12px;
-    border: none;
-    font-family: var(--font-body);
-    font-size: 15px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: opacity 0.15s, transform 0.1s;
-    letter-spacing: 0.2px;
-  }
+  .wl-btn { width: 100%; padding: 14px; border-radius: 12px; border: none; font-family: var(--font-body); font-size: 15px; font-weight: 600; cursor: pointer; transition: opacity 0.15s, transform 0.1s; letter-spacing: 0.2px; }
   .wl-btn:hover { opacity: 0.88; transform: scale(0.99); }
   .wl-btn-primary { background: var(--accent); color: var(--bg); }
-  .wl-btn-ghost {
-    background: transparent;
-    color: var(--text-muted);
-    border: 1px solid var(--border);
-    margin-top: 8px;
-    font-size: 13px;
-  }
+  .wl-btn-ghost { background: transparent; color: var(--text-muted); border: 1px solid var(--border); margin-top: 8px; font-size: 13px; }
 
-  /* STATS */
-  .wl-stats-header {
-    display: flex; align-items: center; justify-content: space-between;
-    margin-bottom: 20px;
-  }
+  .wl-stats-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
 
-  /* HINT LETTERS */
-  .wl-hint {
-    display: flex;
-    gap: 5px;
-    margin-top: 8px;
-    align-items: center;
-  }
-  .wl-hint-label {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    color: var(--text-muted);
-    margin-right: 4px;
-  }
-  .wl-hint-letter {
-    width: 28px; height: 28px;
-    background: var(--surface2);
-    border: 1px solid var(--accent);
-    border-radius: 6px;
-    display: flex; align-items: center; justify-content: center;
-    font-family: var(--font-display);
-    font-size: 14px;
-    font-weight: 700;
-    color: var(--accent);
-    letter-spacing: 0;
-    animation: popIn 0.2s cubic-bezier(0.34,1.56,0.64,1);
-  }
-  .wl-hint-blank {
-    width: 28px; height: 28px;
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-  }
-  @keyframes popIn {
-    from { transform: scale(0.5); opacity: 0; }
-    to   { transform: scale(1);   opacity: 1; }
-  }
+  .wl-hint { display: flex; gap: 5px; margin-top: 8px; align-items: center; }
+  .wl-hint-label { font-family: var(--font-mono); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--text-muted); margin-right: 4px; }
+  .wl-hint-letter { width: 28px; height: 28px; background: var(--surface2); border: 1px solid var(--accent); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 14px; font-weight: 700; color: var(--accent); letter-spacing: 0; animation: popIn 0.2s cubic-bezier(0.34,1.56,0.64,1); }
+  .wl-hint-blank { width: 28px; height: 28px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; }
+  @keyframes popIn { from { transform: scale(0.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
-  /* COPIED TOAST */
-  .wl-toast {
-    position: fixed;
-    bottom: 32px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: var(--green);
-    color: var(--bg);
-    font-family: var(--font-mono);
-    font-size: 13px;
-    font-weight: 500;
-    letter-spacing: 0.5px;
-    padding: 12px 24px;
-    border-radius: 40px;
-    z-index: 200;
-    animation: toastIn 0.25s cubic-bezier(0.34,1.56,0.64,1);
-    white-space: nowrap;
-  }
-  @keyframes toastIn {
-    from { transform: translateX(-50%) translateY(16px); opacity: 0; }
-    to   { transform: translateX(-50%) translateY(0);    opacity: 1; }
-  }
+  .wl-toast { position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%); background: var(--green); color: var(--bg); font-family: var(--font-mono); font-size: 13px; font-weight: 500; letter-spacing: 0.5px; padding: 12px 24px; border-radius: 40px; z-index: 200; animation: toastIn 0.25s cubic-bezier(0.34,1.56,0.64,1); white-space: nowrap; }
+  @keyframes toastIn { from { transform: translateX(-50%) translateY(16px); opacity: 0; } to { transform: translateX(-50%) translateY(0); opacity: 1; } }
 
-  /* LOADING */
-  .wl-loading {
-    min-height: 100vh;
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    gap: 12px;
-    background: var(--bg);
-    font-family: var(--font-mono);
-    color: var(--text-muted);
-    font-size: 12px;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-  }
-  .wl-spinner {
-    width: 28px; height: 28px;
-    border: 2px solid var(--border);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin 0.7s linear infinite;
-  }
+  .wl-loading { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background: var(--bg); font-family: var(--font-mono); color: var(--text-muted); font-size: 12px; letter-spacing: 2px; text-transform: uppercase; }
+  .wl-spinner { width: 28px; height: 28px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
 `;
 
@@ -592,84 +226,162 @@ create table game_results (
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export default function WordLinkGame() {
-  const [puzzle, setPuzzle] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [guesses, setGuesses] = useState(["", "", "", ""]);
-  const [completed, setCompleted] = useState([false, false, false, false]);
+  const [puzzle, setPuzzle]             = useState(null);
+  const [loading, setLoading]           = useState(true);
+  const [guesses, setGuesses]           = useState(["", "", "", ""]);
+  const [completed, setCompleted]       = useState([false, false, false, false]);
   const [wrongGuesses, setWrongGuesses] = useState(0);
-  const [timeLeft, setTimeLeft] = useState(TOTAL_TIME);
-  const [gameStatus, setGameStatus] = useState("playing"); // playing | won | lost
+  const [timeLeft, setTimeLeft]         = useState(TOTAL_TIME);
+  const [gameStatus, setGameStatus]     = useState("playing"); // playing | won | lost
   const [shakingRound, setShakingRound] = useState(null);
-  const [errorMsgs, setErrorMsgs] = useState(["", "", "", ""]);
-  const [stats, setStats] = useState(null);
-  const [screen, setScreen] = useState("home"); // home | game | stats | results
-  const [showHelp, setShowHelp] = useState(false);
-  const [showCopied, setShowCopied] = useState(false);
-  const [hintLetters, setHintLetters] = useState(["", "", "", ""]);
+  const [errorMsgs, setErrorMsgs]       = useState(["", "", "", ""]);
+  const [stats, setStats]               = useState(null);
+  const [screen, setScreen]             = useState("home"); // home | game | results | stats
+  const [showHelp, setShowHelp]         = useState(false);
+  const [showCopied, setShowCopied]     = useState(false);
+  const [hintLetters, setHintLetters]   = useState(["", "", "", ""]);
   const [wrongPerRound, setWrongPerRound] = useState([0, 0, 0, 0]);
-  const timerRef = useRef(null);
-  const inputRefs = useRef([]);
+
+  // ── Refs ──────────────────────────────────────────────────────────────────
+  const timerRef      = useRef(null);
+  const inputRefs     = useRef([]);
   const gameStatusRef = useRef("playing");
 
-  // Keep ref in sync
-  useEffect(() => { gameStatusRef.current = gameStatus; }, [gameStatus]);
+  // Which date the current session belongs to.
+  // Written once per loadPuzzle; read by triggerEndGame and the midnight watcher.
+  const activeDateRef = useRef(null);
 
-  // ESC closes any open modal/overlay
+  // Live mirrors of state — lets triggerEndGame read current values without
+  // closing over stale ones from its useCallback deps.
+  const completedRef    = useRef(completed);
+  const wrongRef        = useRef(wrongGuesses);
+  const timeLeftRef     = useRef(timeLeft);
+  const hintRef         = useRef(hintLetters);
+
+  useEffect(() => { gameStatusRef.current = gameStatus;  }, [gameStatus]);
+  useEffect(() => { completedRef.current  = completed;   }, [completed]);
+  useEffect(() => { wrongRef.current      = wrongGuesses;}, [wrongGuesses]);
+  useEffect(() => { timeLeftRef.current   = timeLeft;    }, [timeLeft]);
+  useEffect(() => { hintRef.current       = hintLetters; }, [hintLetters]);
+
+  // ── Core loader — receives an explicit, freshly-computed dateStr ──────────
+  const loadPuzzle = useCallback(async (dateStr) => {
+    setLoading(true);
+
+    // Reset all game state for the incoming date
+    const resetCompleted = [false, false, false, false];
+    const resetHints     = ["", "", "", ""];
+    setGuesses(["", "", "", ""]);
+    setCompleted(resetCompleted);
+    setWrongGuesses(0);
+    setTimeLeft(TOTAL_TIME);
+    setGameStatus("playing");
+    setHintLetters(resetHints);
+    setWrongPerRound([0, 0, 0, 0]);
+    setErrorMsgs(["", "", "", ""]);
+    setScreen("home");
+
+    // Keep refs in sync immediately so callbacks see fresh values
+    gameStatusRef.current = "playing";
+    completedRef.current  = resetCompleted;
+    wrongRef.current      = 0;
+    timeLeftRef.current   = TOTAL_TIME;
+    hintRef.current       = resetHints;
+    activeDateRef.current = dateStr;
+
+    // Fetch puzzle
+    let p = null;
+    try {
+      const { data, error } = await supabase
+        .from("puzzles")
+        .select("*")
+        .eq("puzzle_date", dateStr)
+        .single();
+      if (!error && data) p = data;
+    } catch (_) {}
+
+    if (!p) p = { ...FALLBACK_PUZZLE, puzzle_date: dateStr };
+
+    p = {
+      ...p,
+      rounds: p.rounds.map((r) => ({
+        ...r,
+        words: r.words.map((w) => w.toUpperCase()),
+      })),
+    };
+    setPuzzle(p);
+
+    // Restore saved state if the user already played this date
+    const savedResult = localStorage.getItem(`wl_played_${dateStr}`);
+    if (savedResult) {
+      const saved = JSON.parse(savedResult);
+      setCompleted(saved.completed);
+      setWrongGuesses(saved.wrongGuesses);
+      setTimeLeft(saved.timeLeft);
+      setHintLetters(saved.hintLetters || resetHints);
+      setGameStatus(saved.gameStatus);
+      setScreen("results");
+    }
+
+    setLoading(false);
+    loadStats();
+  }, []); // intentionally empty — stable for the lifetime of the component
+
+  // ── Initial load ──────────────────────────────────────────────────────────
+  useEffect(() => {
+    loadPuzzle(getTodayEST());
+  }, [loadPuzzle]);
+
+  // ── Midnight reset — setTimeout aimed at exact EST midnight ───────────────
+  // Handles tabs left open overnight. Re-arms itself each day.
+  useEffect(() => {
+    let handle = null;
+
+    const scheduleNext = () => {
+      const delay = msUntilEstMidnight();
+      handle = setTimeout(() => {
+        const newDate = getTodayEST();
+        // Only reload if the date actually ticked over (guards against DST edge cases
+        // where the timeout fires slightly early and it's technically still the same day)
+        if (newDate !== activeDateRef.current) {
+          loadPuzzle(newDate);
+        }
+        scheduleNext(); // arm for the following midnight
+      }, delay);
+    };
+
+    scheduleNext();
+    return () => { if (handle) clearTimeout(handle); };
+  }, [loadPuzzle]);
+
+  // ── Visibility reset — handles devices that sleep across midnight ─────────
+  // A sleeping device may fire the setTimeout late or not at all.
+  // Whenever the tab becomes visible we re-check the date and reload if needed.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      const currentDate = getTodayEST();
+      if (activeDateRef.current && currentDate !== activeDateRef.current) {
+        loadPuzzle(currentDate);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [loadPuzzle]);
+
+  // ── ESC closes overlays ───────────────────────────────────────────────────
   useEffect(() => {
     const handler = (e) => {
       if (e.key !== "Escape") return;
-      if (showHelp)  { setShowHelp(false); return; }
-      if (showCopied){ setShowCopied(false); return; }
-      if (screen === "stats") { setScreen("results"); return; }
+      if (showHelp)           { setShowHelp(false);        return; }
+      if (showCopied)         { setShowCopied(false);       return; }
+      if (screen === "stats") { setScreen("results");       return; }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [showHelp, showCopied, screen]);
 
-  // ── Load puzzle ──
-  useEffect(() => {
-    (async () => {
-      const today = getTodayEST();
-      let p = null;
-      try {
-        const { data, error } = await supabase
-          .from("puzzles")
-          .select("*")
-          .eq("puzzle_date", today)
-          .single();
-        if (!error && data) p = data;
-      } catch (_) {}
-
-      if (!p) p = { ...FALLBACK_PUZZLE, puzzle_date: today };
-
-      // Normalise words to uppercase
-      p = {
-        ...p,
-        rounds: p.rounds.map((r) => ({
-          ...r,
-          words: r.words.map((w) => w.toUpperCase()),
-        })),
-      };
-      setPuzzle(p);
-
-      // Check if user already played today
-      const savedResult = localStorage.getItem(`wl_played_${today}`);
-      if (savedResult) {
-        const saved = JSON.parse(savedResult);
-        setCompleted(saved.completed);
-        setWrongGuesses(saved.wrongGuesses);
-        setTimeLeft(saved.timeLeft);
-        setHintLetters(saved.hintLetters || ["", "", "", ""]);
-        setGameStatus(saved.gameStatus);
-        setScreen("results");
-      }
-
-      setLoading(false);
-      loadStats();
-    })();
-  }, []);
-
-  // ── Load stats ──
+  // ── Stats loader ──────────────────────────────────────────────────────────
   const loadStats = async () => {
     const uid = getUserId();
     try {
@@ -680,7 +392,7 @@ export default function WordLinkGame() {
     }
   };
 
-  // ── Timer ──
+  // ── Timer ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (screen !== "game" || gameStatus !== "playing") return;
     timerRef.current = setInterval(() => {
@@ -694,61 +406,69 @@ export default function WordLinkGame() {
       });
     }, 1000);
     return () => clearInterval(timerRef.current);
-  }, [screen, gameStatus]);
+  }, [screen, gameStatus]); // triggerEndGame is stable so safe to omit here
 
-  // ── End game ──
+  // ── End game ──────────────────────────────────────────────────────────────
+  // Has an empty dep array — reads all game state through refs to avoid
+  // ever capturing stale closure values.
   const triggerEndGame = useCallback(async (status) => {
     if (gameStatusRef.current !== "playing") return;
+
     setGameStatus(status);
     gameStatusRef.current = status;
     clearInterval(timerRef.current);
 
     setTimeout(() => setScreen("results"), 600);
 
-    // Persist result so user can't replay today
-    const today = getTodayEST();
-    const snapshot = {
-      completed,
-      wrongGuesses,
-      timeLeft,
-      hintLetters,
-      gameStatus: status,
-    };
-    localStorage.setItem(`wl_played_${today}`, JSON.stringify(snapshot));
+    // Use the ref — NOT getTodayEST() — so a game that started before midnight
+    // but ended just after it is still saved under the correct date key.
+    const dateStr = activeDateRef.current || getTodayEST();
 
-    const uid = getUserId();
-    const timeTaken = TOTAL_TIME - timeLeft;
-    const isWin = status === "won";
+    // Snapshot via refs so values are always current
+    const snap = {
+      completed:    completedRef.current,
+      wrongGuesses: wrongRef.current,
+      timeLeft:     timeLeftRef.current,
+      hintLetters:  hintRef.current,
+      gameStatus:   status,
+    };
+
+    localStorage.setItem(`wl_played_${dateStr}`, JSON.stringify(snap));
+
+    const uid       = getUserId();
+    const timeTaken = TOTAL_TIME - snap.timeLeft;
+    const isWin     = status === "won";
 
     try {
       const { data: cur } = await supabase.from("user_stats").select("*").eq("user_id", uid).single();
       const newStreak = isWin ? (cur?.current_streak || 0) + 1 : 0;
       const updated = {
-        user_id: uid,
-        games_played: (cur?.games_played || 0) + 1,
-        games_won: (cur?.games_won || 0) + (isWin ? 1 : 0),
+        user_id:        uid,
+        games_played:   (cur?.games_played || 0) + 1,
+        games_won:      (cur?.games_won    || 0) + (isWin ? 1 : 0),
         current_streak: newStreak,
-        max_streak: Math.max(newStreak, cur?.max_streak || 0),
-        best_time: isWin && (!cur?.best_time || timeTaken < cur.best_time) ? timeTaken : cur?.best_time,
+        max_streak:     Math.max(newStreak, cur?.max_streak || 0),
+        best_time:      isWin && (!cur?.best_time || timeTaken < cur.best_time)
+                          ? timeTaken : cur?.best_time,
       };
       await supabase.from("user_stats").upsert(updated);
       setStats(updated);
 
       await supabase.from("game_results").insert({
-        user_id: uid,
-        puzzle_date: puzzle.puzzle_date,
-        completed: isWin,
-        time_taken: timeTaken,
-        wrong_guesses: wrongGuesses,
+        user_id:       uid,
+        puzzle_date:   dateStr,
+        completed:     isWin,
+        time_taken:    timeTaken,
+        wrong_guesses: snap.wrongGuesses,
       });
     } catch (_) {}
-  }, [timeLeft, wrongGuesses, puzzle]);
+  }, []); // stable — all reads via refs
 
-  // ── Submit guess ──
+  // ── Submit guess ──────────────────────────────────────────────────────────
   const submitGuess = useCallback((roundIdx) => {
     if (gameStatus !== "playing" || completed[roundIdx] || !guesses[roundIdx].trim()) return;
 
-    const guess = guesses[roundIdx].trim().toLowerCase();
+    const guess  = guesses[roundIdx].trim().toLowerCase();
     const answer = puzzle.rounds[roundIdx].answer.toLowerCase();
 
     if (guess === answer) {
@@ -758,27 +478,24 @@ export default function WordLinkGame() {
       setHintLetters((h) => h.map((l, i) => (i === roundIdx ? "" : l)));
       if (newCompleted.every(Boolean)) triggerEndGame("won");
     } else {
-      // Shake
       setShakingRound(roundIdx);
       setTimeout(() => setShakingRound(null), 500);
 
-      // Count wrong guesses for this round and reveal next hint letter
-      const newWrongPerRound = wrongPerRound.map((w, i) => (i === roundIdx ? w + 1 : w));
-      setWrongPerRound(newWrongPerRound);
-      const totalWrongNext = wrongGuesses + 1;
+      const newWPR      = wrongPerRound.map((w, i) => (i === roundIdx ? w + 1 : w));
+      setWrongPerRound(newWPR);
+      const totalNext   = wrongGuesses + 1;
+      const isLosing    = totalNext >= MAX_WRONG;
 
-      // Reveal hint: wrongPerRound[roundIdx] tells us how many wrong for this round
-      // Reveal letter at index = newWrongPerRound[roundIdx] - 1, but not on the losing guess
-      const lettersRevealed = newWrongPerRound[roundIdx]; // 1 after first wrong
-      const hintChar = answer[lettersRevealed - 1] ?? null;
-      const isLosingGuess = totalWrongNext >= MAX_WRONG;
-
-      if (hintChar && !isLosingGuess) {
-        const revealed = answer.slice(0, lettersRevealed);
-        setHintLetters((h) => h.map((l, i) => (i === roundIdx ? revealed.toUpperCase() : l)));
-        setErrorMsgs((e) => e.map((m, i) => (i === roundIdx ? `Hint: starts with "${revealed.toUpperCase()}"` : m)));
-      } else if (!isLosingGuess) {
-        setErrorMsgs((e) => e.map((m, i) => (i === roundIdx ? "Not quite — try again" : m)));
+      if (!isLosing) {
+        const revealed = newWPR[roundIdx];
+        const hintChar = answer[revealed - 1] ?? null;
+        if (hintChar) {
+          const prefix = answer.slice(0, revealed);
+          setHintLetters((h) => h.map((l, i) => (i === roundIdx ? prefix.toUpperCase() : l)));
+          setErrorMsgs((e) => e.map((m, i) => (i === roundIdx ? `Hint: starts with "${prefix.toUpperCase()}"` : m)));
+        } else {
+          setErrorMsgs((e) => e.map((m, i) => (i === roundIdx ? "Not quite — try again" : m)));
+        }
       }
 
       setWrongGuesses((prev) => {
@@ -789,18 +506,17 @@ export default function WordLinkGame() {
     }
   }, [gameStatus, completed, guesses, puzzle, triggerEndGame, wrongGuesses, wrongPerRound]);
 
-  const handleKey = (e, idx) => {
-    if (e.key === "Enter") submitGuess(idx);
-  };
+  const handleKey = (e, idx) => { if (e.key === "Enter") submitGuess(idx); };
 
-  const timerPct = (timeLeft / TOTAL_TIME) * 100;
-  const isLow = timeLeft < 30;
+  const timerPct   = (timeLeft / TOTAL_TIME) * 100;
+  const isLow      = timeLeft < 30;
   const wrongDanger = wrongGuesses >= MAX_WRONG - 1;
 
-  // ── SHARE ──
+  // ── Share ──────────────────────────────────────────────────────────────────
   const shareResults = () => {
+    const dateStr = activeDateRef.current || getTodayEST();
     const text = [
-      `🔗 Word Link — ${puzzle.puzzle_date}`,
+      `🔗 Word Link — ${dateStr}`,
       gameStatus === "won" ? `✅ Solved in ${formatTime(TOTAL_TIME - timeLeft)}!` : `❌ Game Over`,
       completed.map((c) => (c ? "🟩" : "🟥")).join(" "),
       `Wrong guesses: ${wrongGuesses}/${MAX_WRONG}`,
@@ -810,7 +526,7 @@ export default function WordLinkGame() {
     setTimeout(() => setShowCopied(false), 2500);
   };
 
-  // ─── SCREENS ────────────────────────────────────────────────────────────────
+  // ─── RENDER ────────────────────────────────────────────────────────────────
 
   if (loading) {
     return (
@@ -836,19 +552,7 @@ export default function WordLinkGame() {
             <div className="wl-date">{puzzle.puzzle_date}</div>
             <button
               onClick={() => setShowHelp(true)}
-              style={{
-                width: 30, height: 30,
-                borderRadius: "50%",
-                background: "var(--surface2)",
-                border: "1px solid var(--border)",
-                color: "var(--text-muted)",
-                fontFamily: "var(--font-mono)",
-                fontSize: 14,
-                cursor: "pointer",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                flexShrink: 0,
-                transition: "border-color 0.2s, color 0.2s",
-              }}
+              style={{ width: 30, height: 30, borderRadius: "50%", background: "var(--surface2)", border: "1px solid var(--border)", color: "var(--text-muted)", fontFamily: "var(--font-mono)", fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "border-color 0.2s, color 0.2s" }}
               onMouseOver={e => { e.currentTarget.style.borderColor = "var(--accent)"; e.currentTarget.style.color = "var(--accent)"; }}
               onMouseOut={e => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.color = "var(--text-muted)"; }}
               aria-label="How to play"
@@ -859,54 +563,21 @@ export default function WordLinkGame() {
         {/* HOME SCREEN */}
         {screen === "home" && (
           <div style={{ width: "100%", maxWidth: 560, display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", paddingTop: 48 }}>
-            <div style={{
-              fontFamily: "var(--font-mono)",
-              fontSize: 11,
-              letterSpacing: "3px",
-              textTransform: "uppercase",
-              color: "var(--text-muted)",
-              marginBottom: 16,
-            }}>Daily Puzzle</div>
-
-            <div style={{
-              fontFamily: "var(--font-display)",
-              fontSize: 64,
-              fontWeight: 900,
-              lineHeight: 1,
-              marginBottom: 8,
-              color: "var(--text)",
-            }}>Word<span style={{ color: "var(--accent)" }}>.</span><br/>Link</div>
-
-            <div style={{
-              fontFamily: "var(--font-body)",
-              fontSize: 15,
-              color: "var(--text-muted)",
-              marginBottom: 56,
-              maxWidth: 280,
-              lineHeight: 1.6,
-            }}>Find the word that links three clues. New puzzle every day.</div>
-
+            <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, letterSpacing: "3px", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 16 }}>Daily Puzzle</div>
+            <div style={{ fontFamily: "var(--font-display)", fontSize: 64, fontWeight: 900, lineHeight: 1, marginBottom: 8, color: "var(--text)" }}>
+              Word<span style={{ color: "var(--accent)" }}>.</span><br />Link
+            </div>
+            <div style={{ fontFamily: "var(--font-body)", fontSize: 15, color: "var(--text-muted)", marginBottom: 56, maxWidth: 280, lineHeight: 1.6 }}>
+              Find the word that links three clues. New puzzle every day.
+            </div>
             <div style={{ display: "flex", gap: 24, marginBottom: 56, width: "100%", justifyContent: "center" }}>
               {[["⏱", "2 min"], ["❌", "4 wrong"], ["🎯", "4 rounds"]].map(([icon, label]) => (
-                <div key={label} style={{
-                  display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
-                  fontFamily: "var(--font-mono)", fontSize: 11,
-                  letterSpacing: "1px", color: "var(--text-muted)",
-                  textTransform: "uppercase",
-                }}>
-                  <div style={{
-                    width: 44, height: 44,
-                    background: "var(--surface)",
-                    border: "1px solid var(--border)",
-                    borderRadius: 12,
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: 20,
-                  }}>{icon}</div>
+                <div key={label} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, fontFamily: "var(--font-mono)", fontSize: 11, letterSpacing: "1px", color: "var(--text-muted)", textTransform: "uppercase" }}>
+                  <div style={{ width: 44, height: 44, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>{icon}</div>
                   {label}
                 </div>
               ))}
             </div>
-
             <button className="wl-btn wl-btn-primary" style={{ maxWidth: 320 }} onClick={() => setScreen("game")}>
               Play Today's Puzzle
             </button>
@@ -919,9 +590,7 @@ export default function WordLinkGame() {
             <div className="wl-hud">
               <div className="wl-hud-cell">
                 <div className="wl-hud-label">Time</div>
-                <div className={`wl-hud-value ${isLow ? "danger" : timeLeft < 60 ? "warning" : ""}`}>
-                  {formatTime(timeLeft)}
-                </div>
+                <div className={`wl-hud-value ${isLow ? "danger" : timeLeft < 60 ? "warning" : ""}`}>{formatTime(timeLeft)}</div>
               </div>
               <div className="wl-hud-cell">
                 <div className="wl-hud-label">Wrong</div>
@@ -946,18 +615,13 @@ export default function WordLinkGame() {
         {screen === "game" && (
           <div className="wl-rounds">
             {puzzle.rounds.map((round, idx) => (
-              <div
-                key={idx}
-                className={`wl-round ${completed[idx] ? "solved" : ""} ${shakingRound === idx ? "shaking" : ""}`}
-              >
+              <div key={idx} className={`wl-round ${completed[idx] ? "solved" : ""} ${shakingRound === idx ? "shaking" : ""}`}>
                 <div className="wl-round-header">
                   <div className="wl-round-num">Round {idx + 1}</div>
                   {completed[idx] && <div className="wl-round-solved-badge">✓ Solved</div>}
                 </div>
                 <div className="wl-words">
-                  {round.words.map((w, wi) => (
-                    <div key={wi} className="wl-word">{w}</div>
-                  ))}
+                  {round.words.map((w, wi) => <div key={wi} className="wl-word">{w}</div>)}
                 </div>
                 {completed[idx] ? (
                   <div className="wl-answer-reveal">{round.answer.toUpperCase()}</div>
@@ -983,11 +647,7 @@ export default function WordLinkGame() {
                         autoComplete="off"
                         autoCapitalize="none"
                       />
-                      <button
-                        className="wl-submit"
-                        onClick={() => submitGuess(idx)}
-                        disabled={!guesses[idx].trim()}
-                      >Submit</button>
+                      <button className="wl-submit" onClick={() => submitGuess(idx)} disabled={!guesses[idx].trim()}>Submit</button>
                     </div>
                     <div className="wl-error-msg">{errorMsgs[idx]}</div>
                     {hintLetters[idx] && (
@@ -1008,7 +668,7 @@ export default function WordLinkGame() {
           </div>
         )}
 
-        {/* RESULTS SCREEN */}
+        {/* RESULTS */}
         {screen === "results" && (
           <div className="wl-overlay">
             <div className="wl-modal">
@@ -1035,7 +695,7 @@ export default function WordLinkGame() {
                 </div>
                 {stats && (
                   <div className="wl-result-cell">
-                    <div className="wl-result-val">{stats.current_streak} {stats.current_streak > 1 ? "🔥" : ""}</div>
+                    <div className="wl-result-val">{stats.current_streak}{stats.current_streak > 1 ? " 🔥" : ""}</div>
                     <div className="wl-result-label">Win Streak</div>
                   </div>
                 )}
@@ -1052,44 +712,24 @@ export default function WordLinkGame() {
                 ))}
               </div>
               <button className="wl-btn wl-btn-primary" onClick={shareResults}>Share Results</button>
-              {stats && (
-                <button className="wl-btn wl-btn-ghost" onClick={() => setScreen("stats")}>View Stats</button>
-              )}
+              {stats && <button className="wl-btn wl-btn-ghost" onClick={() => setScreen("stats")}>View Stats</button>}
             </div>
           </div>
         )}
 
-        {/* STATS SCREEN */}
+        {/* STATS */}
         {screen === "stats" && stats && (
           <div className="wl-overlay">
             <div className="wl-modal">
               <div className="wl-stats-header">
                 <div className="wl-modal-title" style={{ fontSize: 24 }}>Statistics</div>
-                <button
-                  onClick={() => setScreen("results")}
-                  style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 22 }}
-                  aria-label="Close"
-                >×</button>
+                <button onClick={() => setScreen("results")} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 22 }} aria-label="Close">×</button>
               </div>
               <div className="wl-result-grid">
-                <div className="wl-result-cell">
-                  <div className="wl-result-val">{stats.games_played}</div>
-                  <div className="wl-result-label">Played</div>
-                </div>
-                <div className="wl-result-cell">
-                  <div className="wl-result-val">
-                    {stats.games_played ? Math.round((stats.games_won / stats.games_played) * 100) : 0}%
-                  </div>
-                  <div className="wl-result-label">Win Rate</div>
-                </div>
-                <div className="wl-result-cell">
-                  <div className="wl-result-val">{stats.current_streak}</div>
-                  <div className="wl-result-label">Streak</div>
-                </div>
-                <div className="wl-result-cell">
-                  <div className="wl-result-val">{stats.max_streak}</div>
-                  <div className="wl-result-label">Best Streak</div>
-                </div>
+                <div className="wl-result-cell"><div className="wl-result-val">{stats.games_played}</div><div className="wl-result-label">Played</div></div>
+                <div className="wl-result-cell"><div className="wl-result-val">{stats.games_played ? Math.round((stats.games_won / stats.games_played) * 100) : 0}%</div><div className="wl-result-label">Win Rate</div></div>
+                <div className="wl-result-cell"><div className="wl-result-val">{stats.current_streak}</div><div className="wl-result-label">Streak</div></div>
+                <div className="wl-result-cell"><div className="wl-result-val">{stats.max_streak}</div><div className="wl-result-label">Best Streak</div></div>
               </div>
               {stats.best_time && (
                 <div className="wl-result-cell" style={{ marginBottom: 20, textAlign: "center", padding: 16 }}>
@@ -1102,18 +742,14 @@ export default function WordLinkGame() {
           </div>
         )}
 
-        {/* HELP MODAL */}
+        {/* HELP */}
         {showHelp && (
           <div className="wl-overlay" onClick={() => setShowHelp(false)}>
             <div className="wl-modal" onClick={e => e.stopPropagation()}>
               <div className="wl-stats-header" style={{ marginBottom: 16 }}>
                 <div className="wl-modal-title" style={{ fontSize: 24 }}>How to Play</div>
-                <button
-                  onClick={() => setShowHelp(false)}
-                  style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 22 }}
-                >×</button>
+                <button onClick={() => setShowHelp(false)} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 22 }}>×</button>
               </div>
-
               <div className="wl-howto-example">
                 <p>Example:</p>
                 <div className="ex-words">
@@ -1123,23 +759,19 @@ export default function WordLinkGame() {
                 </div>
                 <div className="ex-answer">→ BREAK &nbsp;<span style={{ color: "var(--text-muted)", fontSize: 11 }}>heartbreak · breakfast · breakdown</span></div>
               </div>
-
               <div className="wl-rules" style={{ marginBottom: 8 }}>
                 <div className="wl-rule"><div className="wl-rule-icon">⏱</div> You have <strong>&nbsp;2 minutes</strong></div>
                 <div className="wl-rule"><div className="wl-rule-icon">❌</div> Only <strong>&nbsp;4 wrong guesses</strong> allowed</div>
                 <div className="wl-rule"><div className="wl-rule-icon">🔗</div> Word can come before OR after each clue</div>
                 <div className="wl-rule"><div className="wl-rule-icon">🎯</div> Solve all 4 rounds to win</div>
               </div>
-
               <button className="wl-btn wl-btn-ghost" onClick={() => setShowHelp(false)} style={{ marginTop: 16 }}>Got it</button>
             </div>
           </div>
         )}
 
-        {/* COPIED TOAST */}
-        {showCopied && (
-          <div className="wl-toast">✓ Copied to clipboard</div>
-        )}
+        {/* TOAST */}
+        {showCopied && <div className="wl-toast">✓ Copied to clipboard</div>}
 
       </div>
     </>
