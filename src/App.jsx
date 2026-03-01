@@ -574,6 +574,16 @@ const css = `
     margin-top: 8px;
     font-size: 13px;
   }
+  .wl-result-dev-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .wl-result-dev-actions .wl-mini-btn {
+    width: 100%;
+    height: 36px;
+  }
 
   /* STATS */
   .wl-stats-header {
@@ -1292,6 +1302,14 @@ export default function WordLinkGame() {
               {stats && (
                 <button className="wl-btn wl-btn-ghost" onClick={() => setScreen("stats")}>View Stats</button>
               )}
+              <div className="wl-result-dev-actions">
+                <button className="wl-mini-btn" onClick={resetPuzzleProgress}>Reset Puzzle</button>
+                <button
+                  className="wl-mini-btn"
+                  onClick={() => goToRelativeDay(1)}
+                  disabled={activeDate >= today}
+                >Next Day</button>
+              </div>
             </div>
           </div>
         )}
