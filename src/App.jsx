@@ -112,6 +112,9 @@ const css = `
   .wl-calendar-btn {
     width: 30px;
     height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     border-radius: 8px;
     background: var(--surface2);
     border: 1px solid var(--border);
@@ -214,6 +217,14 @@ const css = `
     grid-template-columns: 1fr 1fr 1fr;
     gap: 10px;
     margin-bottom: 28px;
+  }
+  .wl-hud-sticky {
+    width: 100%;
+    position: sticky;
+    top: 70px;
+    z-index: 15;
+    background: linear-gradient(to bottom, rgba(15, 14, 23, 0.95), rgba(15, 14, 23, 0.82), rgba(15, 14, 23, 0));
+    padding-top: 4px;
   }
   .wl-hud-cell {
     background: var(--surface);
@@ -1113,7 +1124,15 @@ export default function WordLinkGame() {
         {/* HEADER */}
         <div className="wl-header-wrap">
           <header className="wl-header">
-            <div className="wl-logo">Word<span>.</span>Link</div>
+            <button
+              type="button"
+              className="wl-logo"
+              onClick={() => setScreen("home")}
+              style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }}
+              aria-label="Return to home"
+            >
+              Word<span>.</span>Link
+            </button>
             <div style={{ display: "flex", alignItems: "center", gap: 8, position: "relative" }}>
               <div className="wl-date">{puzzle.puzzle_date}</div>
               <button className="wl-calendar-btn" onClick={() => setShowArchivePicker((v) => !v)} aria-label="Open archived puzzle calendar">📅</button>
@@ -1233,7 +1252,7 @@ export default function WordLinkGame() {
 
         {/* HUD */}
         {screen === "game" && (
-          <>
+          <div className="wl-hud-sticky">
             <div className="wl-hud">
               <div className="wl-hud-cell">
                 <div className="wl-hud-label">Time</div>
@@ -1257,7 +1276,7 @@ export default function WordLinkGame() {
             <div className="wl-timer-bar-wrap">
               <div className={`wl-timer-bar ${isLow ? "low" : ""}`} style={{ width: `${timerPct}%` }} />
             </div>
-          </>
+          </div>
         )}
 
         {/* ROUNDS */}
@@ -1458,6 +1477,9 @@ export default function WordLinkGame() {
               </div>
 
               <div className="wl-howto-example">
+                <p style={{ marginBottom: 10 }}>
+                  Enter one word per round that can pair with all three clues, either before or after each clue word.
+                </p>
                 <p>Example:</p>
                 <div className="ex-words">
                   <div className="ex-word">Heart</div>
