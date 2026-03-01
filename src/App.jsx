@@ -26,6 +26,16 @@ const getTodayEST = () => {
   return new Date(est).toISOString().split("T")[0];
 };
 
+const shiftDate = (isoDate, deltaDays) => {
+  const next = new Date(`${isoDate}T00:00:00`);
+  if (Number.isNaN(next.getTime())) return isoDate;
+  next.setDate(next.getDate() + deltaDays);
+  return next.toISOString().split("T")[0];
+};
+
+const clampDateToToday = (isoDate, today) => (isoDate > today ? today : isoDate);
+const isISODate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value);
+
 const formatTime = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
 const getUserId = () => {
@@ -157,6 +167,43 @@ const css = `
     color: var(--text-muted);
     letter-spacing: 1px;
     text-transform: uppercase;
+  }
+  .wl-toolbar {
+    width: 100%;
+    max-width: 560px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .wl-toolbar-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .wl-mini-btn {
+    height: 30px;
+    border-radius: 8px;
+    padding: 0 10px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    transition: border-color 0.2s, color 0.2s;
+  }
+  .wl-mini-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .wl-mini-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
   }
 
   /* HUD */
@@ -685,7 +732,11 @@ export default function WordLinkGame() {
   const today = getTodayEST();
   const [puzzle, setPuzzle] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [activeDate, setActiveDate] = useState(today);
+  const [activeDate, setActiveDate] = useState(() => {
+    const urlDate = new URLSearchParams(window.location.search).get("date");
+    if (!urlDate || !isISODate(urlDate)) return today;
+    return clampDateToToday(urlDate, today);
+  });
   const [showArchivePicker, setShowArchivePicker] = useState(false);
   const [archiveMsg, setArchiveMsg] = useState("");
   const [guesses, setGuesses] = useState(["", "", "", ""]);
@@ -732,6 +783,25 @@ export default function WordLinkGame() {
     setWrongPerRound([0, 0, 0, 0]);
   };
 
+  const resetPuzzleProgress = () => {
+    localStorage.removeItem(`wl_played_${activeDate}`);
+    resetBoard();
+    setScreen("game");
+  };
+
+  const goToRelativeDay = (deltaDays) => {
+    const next = clampDateToToday(shiftDate(activeDate, deltaDays), today);
+    setActiveDate(next);
+  };
+
+  const sharePuzzleLink = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("date", activeDate);
+    navigator.clipboard.writeText(url.toString()).catch(() => {});
+    setShowCopied(true);
+    setTimeout(() => setShowCopied(false), 2500);
+  };
+
   // ── Load puzzle ──
   useEffect(() => {
     (async () => {
@@ -765,6 +835,9 @@ export default function WordLinkGame() {
       setPuzzle(p);
       resetBoard();
       setScreen("game");
+      const url = new URL(window.location.href);
+      url.searchParams.set("date", activeDate);
+      window.history.replaceState({}, "", url);
 
       // Check if user already played today's puzzle
       const savedResult = activeDate === today ? localStorage.getItem(`wl_played_${today}`) : null;
@@ -999,6 +1072,18 @@ export default function WordLinkGame() {
             {archiveMsg}
           </div>
         )}
+
+        <div className="wl-toolbar">
+          <div className="wl-toolbar-group">
+            <button className="wl-mini-btn" onClick={() => goToRelativeDay(-1)} aria-label="Previous day">← Day</button>
+            <button className="wl-mini-btn" onClick={() => goToRelativeDay(1)} aria-label="Next day" disabled={activeDate >= today}>Day →</button>
+            <button className="wl-mini-btn" onClick={() => setActiveDate(today)} aria-label="Go to today" disabled={activeDate === today}>Today</button>
+          </div>
+          <div className="wl-toolbar-group">
+            <button className="wl-mini-btn" onClick={resetPuzzleProgress}>Reset</button>
+            <button className="wl-mini-btn" onClick={sharePuzzleLink}>Share Link</button>
+          </div>
+        </div>
 
         {/* HOME SCREEN */}
         {screen === "home" && (
