@@ -1093,7 +1093,7 @@ export default function WordLinkGame() {
   // ── SHARE ──
   const shareResults = () => {
     const text = [
-      `🔗 Word Link — ${puzzle.puzzle_date}`,
+      `🔗 WordFuse — ${puzzle.puzzle_date}`,
       gameStatus === "won" ? `✅ Solved in ${formatTime(TOTAL_TIME - timeLeft)}!` : `❌ Game Over`,
       completed.map((c) => (c ? "🟩" : "🟥")).join(" "),
       `Wrong guesses: ${wrongGuesses}/${MAX_WRONG}`,
@@ -1132,7 +1132,7 @@ export default function WordLinkGame() {
               style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }}
               aria-label="Return to home"
             >
-              Word<span>.</span>Link
+              Word<span style={{ color: "var(--accent)" }}>Fuse</span>
             </button>
             <div style={{ display: "flex", alignItems: "center", gap: 8, position: "relative" }}>
               <div className="wl-date">{puzzle.puzzle_date}</div>
@@ -1201,7 +1201,7 @@ export default function WordLinkGame() {
               lineHeight: 1,
               marginBottom: 8,
               color: "var(--text)",
-            }}>Word<span style={{ color: "var(--accent)" }}>.</span><br/>Link</div>
+            }}>Word<span style={{ color: "var(--accent)" }}>Fuse</span></div>
 
             <div style={{
               fontFamily: "var(--font-body)",
