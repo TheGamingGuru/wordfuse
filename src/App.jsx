@@ -1338,7 +1338,7 @@ export default function WordLinkGame() {
               Word<span style={{ color: "var(--accent)" }}>Fuse</span>
             </button>
             <div ref={archivePickerRef} style={{ display: "flex", alignItems: "center", gap: 8, position: "relative" }}>
-              <div className="wl-date">{puzzle.puzzle_date}</div>
+              <div className="wl-date">{activeDate === today ? "Daily Game" : puzzle.puzzle_date}</div>
               <button className="wl-calendar-btn" onClick={openArchiveModal} aria-label="Browse past puzzles">📅</button>
               <button
                 onClick={() => setShowHelp(true)}
@@ -1421,7 +1421,7 @@ export default function WordLinkGame() {
             </div>
 
             <button className="wl-btn wl-btn-primary" style={{ maxWidth: 320 }} onClick={() => setScreen("game")}>
-              Play Today's Puzzle
+              {activeDate === today ? "Play Today's Puzzle" : `Play Game from ${activeDate}`}
             </button>
           </div>
         )}
@@ -1622,7 +1622,7 @@ export default function WordLinkGame() {
                 lineHeight: 1.6,
                 marginBottom: 16,
               }}>
-                 Solve for the one word that can pair with all three words for the current round, either before or after, to create a compound word or common phrase. 
+                Enter one word per round that can pair with all three clues, either before or after each clue word.
               </p>
               <div className="wl-howto-example">
                 <p>Example:</p>
