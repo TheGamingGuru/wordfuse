@@ -1666,17 +1666,6 @@ export default function WordLinkGame() {
                       </button>
                     </div>
                     <div className="wl-error-msg">{errorMsgs[idx]}</div>
-                    {hintLetters[idx] && (
-                      <div className="wl-hint">
-                        <span className="wl-hint-label">Hint</span>
-                        {hintLetters[idx].split("").map((letter, li) => (
-                          <div key={li} className="wl-hint-letter">{letter}</div>
-                        ))}
-                        {Array.from({ length: Math.max(0, puzzle.rounds[idx].answer.length - hintLetters[idx].length) }).map((_, li) => (
-                          <div key={"b" + li} className="wl-hint-blank" />
-                        ))}
-                      </div>
-                    )}
                   </>
                 )}
               </div>
