@@ -1622,7 +1622,7 @@ export default function WordLinkGame() {
                 lineHeight: 1.6,
                 marginBottom: 16,
               }}>
-                 Solve for the one word that can pair with all three round words, either before or after, to create a compound word or common phrase. 
+                 Solve for the one word that can pair with all three words for the current round, either before or after, to create a compound word or common phrase. 
               </p>
               <div className="wl-howto-example">
                 <p>Example:</p>
