@@ -1400,7 +1400,7 @@ export default function WordLinkGame() {
             }}>Find the word that links three clues. New puzzle every day.</div>
 
             <div style={{ display: "flex", gap: 24, marginBottom: 56, width: "100%", justifyContent: "center" }}>
-              {[["⏱", "3 min"], ["❌", "4 wrong"], ["🎯", "4 rounds"]].map(([icon, label]) => (
+              {[["⏱", "3 min"], ["🔎", "4 attempts"], ["🎯", "4 rounds"]].map(([icon, label]) => (
                 <div key={label} style={{
                   display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
                   fontFamily: "var(--font-mono)", fontSize: 11,
