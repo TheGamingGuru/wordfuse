@@ -69,7 +69,7 @@ const getUserId = () => {
 
 // ─── STYLES ──────────────────────────────────────────────────────────────────
 const css = `
-  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&family=Nunito:wght@700;800&display=swap');
 
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -84,6 +84,7 @@ const css = `
     --text: #f0ede8;
     --text-muted: #8b8799;
     --font-display: 'Playfair Display', serif;
+    --font-word: 'Nunito', sans-serif;
     --font-mono: 'DM Mono', monospace;
     --font-body: 'DM Sans', sans-serif;
   }
@@ -378,12 +379,14 @@ const css = `
     border-radius: 10px;
     padding: 12px 8px;
     text-align: center;
-    font-family: var(--font-display);
-    font-size: 15px;
-    font-weight: 700;
-    letter-spacing: 1.5px;
+    font-family: var(--font-word);
+    font-size: 16px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    line-height: 1.05;
     color: var(--text);
     text-transform: uppercase;
+    text-shadow: 0 1px 0 rgba(0, 0, 0, 0.24);
   }
 
   .wl-answer-entry {
@@ -492,6 +495,10 @@ const css = `
     width: 100%;
     animation: slideUp 0.3s cubic-bezier(0.22,1,0.36,1);
   }
+  .wl-modal.wl-results-modal {
+    max-width: 380px;
+    padding: 24px 20px 18px;
+  }
   @keyframes slideUp {
     from { transform: translateY(20px); opacity: 0; }
     to   { transform: translateY(0);    opacity: 1; }
@@ -527,6 +534,16 @@ const css = `
     font-size: 14px;
     color: var(--text-muted);
     margin-bottom: 24px;
+  }
+  .wl-results-modal .wl-modal-title {
+    font-size: 28px;
+    text-align: center;
+    margin-bottom: 4px;
+  }
+  .wl-results-modal .wl-modal-sub {
+    text-align: center;
+    margin-bottom: 16px;
+    line-height: 1.45;
   }
 
   /* HOW TO PLAY */
@@ -587,18 +604,18 @@ const css = `
   .wl-result-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 10px;
-    margin-bottom: 20px;
+    gap: 8px;
+    margin-bottom: 14px;
   }
   .wl-result-cell {
     background: var(--surface2);
     border-radius: 10px;
-    padding: 14px 12px;
+    padding: 11px 10px;
     text-align: center;
   }
   .wl-result-val {
     font-family: var(--font-mono);
-    font-size: 26px;
+    font-size: 22px;
     font-weight: 500;
     color: var(--text);
     margin-bottom: 2px;
@@ -614,8 +631,8 @@ const css = `
   .wl-answer-list {
     background: var(--surface2);
     border-radius: 10px;
-    padding: 14px;
-    margin-bottom: 20px;
+    padding: 10px 12px;
+    margin-bottom: 14px;
   }
   .wl-answer-list-title {
     font-family: var(--font-mono);
@@ -623,7 +640,7 @@ const css = `
     letter-spacing: 2px;
     text-transform: uppercase;
     color: var(--text-muted);
-    margin-bottom: 10px;
+    margin-bottom: 8px;
   }
   .wl-answer-row {
     display: flex;
@@ -631,16 +648,21 @@ const css = `
     align-items: center;
     justify-content: center;
     text-align: center;
-    gap: 4px;
-    padding: 6px 0;
+    gap: 3px;
+    padding: 5px 0;
     border-bottom: 1px solid var(--border);
     font-size: 13px;
   }
   .wl-answer-row:last-child { border-bottom: none; }
   .wl-answer-row-words { color: var(--text-muted); font-size: 12px; }
+  .wl-results-modal .wl-answer-row-words {
+    font-family: var(--font-word);
+    font-weight: 700;
+    letter-spacing: 0.3px;
+  }
   .wl-answer-row-ans {
     font-family: var(--font-mono);
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 1px;
@@ -651,7 +673,7 @@ const css = `
   /* BUTTONS */
   .wl-btn {
     width: 100%;
-    padding: 14px;
+    padding: 12px;
     border-radius: 12px;
     border: none;
     font-family: var(--font-body);
@@ -669,6 +691,9 @@ const css = `
     border: 1px solid var(--border);
     margin-top: 8px;
     font-size: 13px;
+  }
+  .wl-results-modal .wl-btn-ghost {
+    margin-top: 6px;
   }
   .wl-result-dev-actions {
     display: grid;
@@ -825,7 +850,7 @@ const ResultsModal = ({
   onShareLink,
 }) => (
   <div className="wl-overlay">
-    <div className="wl-modal">
+    <div className="wl-modal wl-results-modal">
       {gameStatus === "won" && (
         <div className="wl-win-burst" aria-hidden="true">
           {WIN_SPARKS.map((spark, idx) => (
