@@ -914,7 +914,7 @@ const ResultsModal = ({
       {gameStatus === "won" && (
         <div className="wl-result-nav-actions">
           <button className="wl-btn wl-btn-ghost" onClick={onGoHome}>Go Home</button>
-          <button className="wl-btn wl-btn-ghost" onClick={onViewArchived}>Archived Games</button>
+          <button className="wl-btn wl-btn-ghost" onClick={onViewArchived} aria-label="Open archived puzzle calendar">📅</button>
         </div>
       )}
       <div className="wl-result-dev-actions">
@@ -1609,7 +1609,7 @@ export default function WordLinkGame() {
               setScreen("home");
             }}
             onViewArchived={() => {
-              setScreen("home");
+              setScreen("game");
               setShowArchivePicker(true);
             }}
             onPrevDay={() => goToRelativeDay(-1)}
