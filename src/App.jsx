@@ -8,6 +8,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const TOTAL_TIME = 180;
 const MAX_WRONG = 4;
+const APP_CACHE_VERSION = "2026-03-02";
 
 // ─── FALLBACK PUZZLE (used if Supabase isn't connected yet) ──────────────────
 const FALLBACK_PUZZLE = {
@@ -46,6 +47,13 @@ const shiftDate = (isoDate, deltaDays) => {
 
 const clampDateToToday = (isoDate, today) => (isoDate > today ? today : isoDate);
 const isISODate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value);
+const writeDateParam = (url, date, today) => {
+  if (date === today) {
+    url.searchParams.delete("date");
+    return;
+  }
+  url.searchParams.set("date", date);
+};
 
 const formatTime = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
@@ -777,6 +785,17 @@ create table game_results (
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export default function WordLinkGame() {
   useEffect(() => {
+    const savedVersion = localStorage.getItem("wl_cache_version");
+    if (savedVersion === APP_CACHE_VERSION) return;
+
+    Object.keys(localStorage)
+      .filter((key) => key.startsWith("wl_"))
+      .forEach((key) => localStorage.removeItem(key));
+
+    localStorage.setItem("wl_cache_version", APP_CACHE_VERSION);
+  }, []);
+
+  useEffect(() => {
     document.title = "WordFuse";
   }, []);
 
@@ -869,13 +888,12 @@ export default function WordLinkGame() {
   };
 
   const goToRelativeDay = (deltaDays) => {
-    const next = clampDateToToday(shiftDate(activeDate, deltaDays), today);
-    setActiveDate(next);
+    setActiveDate(shiftDate(activeDate, deltaDays));
   };
 
   const sharePuzzleLink = () => {
     const url = new URL(window.location.href);
-    url.searchParams.set("date", activeDate);
+    writeDateParam(url, activeDate, today);
     navigator.clipboard.writeText(url.toString()).catch(() => {});
     setShowCopied(true);
     setTimeout(() => setShowCopied(false), 2500);
@@ -914,7 +932,7 @@ export default function WordLinkGame() {
       setPuzzle(p);
       resetBoard();
       const url = new URL(window.location.href);
-      url.searchParams.set("date", activeDate);
+      writeDateParam(url, activeDate, today);
       window.history.replaceState({}, "", url);
 
       // Restore completed puzzle results for today's date
@@ -1155,7 +1173,7 @@ export default function WordLinkGame() {
   // ── SHARE ──
   const shareResults = () => {
     const gameUrl = new URL(window.location.href);
-    gameUrl.searchParams.set("date", activeDate);
+    writeDateParam(gameUrl, activeDate, today);
     const text = [
       `🔗 Play WordFuse: ${gameUrl.toString()}`,
       `📅 Puzzle: ${puzzle.puzzle_date}`,
@@ -1301,6 +1319,10 @@ export default function WordLinkGame() {
             <button className="wl-btn wl-btn-primary" style={{ maxWidth: 320 }} onClick={() => setScreen("game")}>
               Play Today's Puzzle
             </button>
+            <div className="wl-result-dev-actions" style={{ marginTop: 14 }}>
+              <button className="wl-mini-btn" onClick={resetPuzzleProgress}>Reset Puzzle</button>
+              <button className="wl-mini-btn" onClick={() => goToRelativeDay(1)}>Simulate +1 Day</button>
+            </div>
           </div>
         )}
 
@@ -1487,7 +1509,6 @@ export default function WordLinkGame() {
                   className="wl-mini-btn"
                   onClick={() => goToRelativeDay(1)}
                   aria-label="Next day"
-                  disabled={activeDate >= today}
                 >Day →</button>
                 <button className="wl-mini-btn" onClick={() => setActiveDate(today)} aria-label="Go to today" disabled={activeDate === today}>Today</button>
                 <button className="wl-mini-btn" onClick={resetPuzzleProgress}>Reset Puzzle</button>
