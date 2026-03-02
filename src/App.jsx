@@ -21,15 +21,26 @@ const FALLBACK_PUZZLE = {
 };
 
 // ─── UTILS ───────────────────────────────────────────────────────────────────
-const getTodayEST = () => {
-  const est = new Date().toLocaleString("en-US", { timeZone: "America/New_York" });
-  return new Date(est).toISOString().split("T")[0];
+const formatDateInTimeZone = (date, timeZone) => {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+
+  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  return `${values.year}-${values.month}-${values.day}`;
 };
 
+const getTodayEST = () => formatDateInTimeZone(new Date(), "America/New_York");
+
 const shiftDate = (isoDate, deltaDays) => {
-  const next = new Date(`${isoDate}T00:00:00`);
-  if (Number.isNaN(next.getTime())) return isoDate;
-  next.setDate(next.getDate() + deltaDays);
+  const [year, month, day] = isoDate.split("-").map(Number);
+  if (!year || !month || !day) return isoDate;
+
+  const next = new Date(Date.UTC(year, month - 1, day));
+  next.setUTCDate(next.getUTCDate() + deltaDays);
   return next.toISOString().split("T")[0];
 };
 
