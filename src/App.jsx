@@ -10,7 +10,7 @@ const TOTAL_TIME = 180;
 const MAX_WRONG = 4;
 const APP_CACHE_VERSION = "2026-03-02";
 
-// ─── FALLBACK PUZZLE (used if Supabase isn't connected yet) ──────────────────
+// ─── FALLBACK PUZZLE ─────────────────────────────────────────────────────────
 const FALLBACK_PUZZLE = {
   puzzle_date: "2024-01-01",
   rounds: [
@@ -29,7 +29,6 @@ const formatDateInTimeZone = (date, timeZone) => {
     month: "2-digit",
     day: "2-digit",
   }).formatToParts(date);
-
   const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
   return `${values.year}-${values.month}-${values.day}`;
 };
@@ -39,7 +38,6 @@ const getTodayEST = () => formatDateInTimeZone(new Date(), "America/New_York");
 const shiftDate = (isoDate, deltaDays) => {
   const [year, month, day] = isoDate.split("-").map(Number);
   if (!year || !month || !day) return isoDate;
-
   const next = new Date(Date.UTC(year, month - 1, day));
   next.setUTCDate(next.getUTCDate() + deltaDays);
   return next.toISOString().split("T")[0];
@@ -122,7 +120,6 @@ const css = `
     border-bottom: 1px solid rgba(46, 42, 69, 0.45);
   }
 
-  /* HEADER */
   .wl-header {
     width: 100%;
     max-width: 560px;
@@ -192,21 +189,6 @@ const css = `
     color: var(--text-muted);
     letter-spacing: 1px;
     text-transform: uppercase;
-  }
-  .wl-toolbar {
-    width: 100%;
-    max-width: 560px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    margin-bottom: 14px;
-  }
-  .wl-toolbar-group {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
   }
   .wl-mini-btn {
     height: 30px;
@@ -515,7 +497,7 @@ const css = `
     top: -14%;
     font-size: 20px;
     opacity: 0;
-    animation: fallCelebrate 2.6s ease-out infinite;
+    animation: fallCelebrate 2.6s ease-out 1 forwards;
   }
   @keyframes fallCelebrate {
     0% { transform: translate3d(0, 0, 0) rotate(0deg) scale(0.8); opacity: 0; }
@@ -703,7 +685,7 @@ const css = `
     flex-direction: column;
     gap: 8px;
     margin: 20px 0;
-    max-height: 260px;
+    max-height: 320px;
     overflow-y: auto;
   }
   .wl-archive-date-btn {
@@ -713,13 +695,26 @@ const css = `
     background: var(--surface2);
     color: var(--text);
     border-radius: 10px;
-    padding: 10px 12px;
+    padding: 10px 14px;
     font-family: var(--font-mono);
+    font-size: 13px;
     cursor: pointer;
     transition: border-color 0.2s, color 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
   }
   .wl-archive-date-btn:hover {
     border-color: var(--accent);
+    color: var(--accent);
+  }
+  .wl-archive-date-btn.today {
+    border-color: var(--accent);
+  }
+  .wl-archive-date-tag {
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
     color: var(--accent);
   }
   .wl-archive-empty {
@@ -728,16 +723,6 @@ const css = `
     color: var(--text-muted);
     font-family: var(--font-body);
     font-size: 14px;
-  }
-  .wl-result-dev-actions {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-    margin-top: 8px;
-  }
-  .wl-result-dev-actions .wl-mini-btn {
-    width: 100%;
-    height: 36px;
   }
   .wl-result-nav-actions {
     display: grid;
@@ -750,45 +735,6 @@ const css = `
   .wl-stats-header {
     display: flex; align-items: center; justify-content: space-between;
     margin-bottom: 20px;
-  }
-
-  /* HINT LETTERS */
-  .wl-hint {
-    display: flex;
-    gap: 5px;
-    margin-top: 8px;
-    align-items: center;
-  }
-  .wl-hint-label {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    color: var(--text-muted);
-    margin-right: 4px;
-  }
-  .wl-hint-letter {
-    width: 28px; height: 28px;
-    background: var(--surface2);
-    border: 1px solid var(--accent);
-    border-radius: 6px;
-    display: flex; align-items: center; justify-content: center;
-    font-family: var(--font-display);
-    font-size: 14px;
-    font-weight: 700;
-    color: var(--accent);
-    letter-spacing: 0;
-    animation: popIn 0.2s cubic-bezier(0.34,1.56,0.64,1);
-  }
-  .wl-hint-blank {
-    width: 28px; height: 28px;
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-  }
-  @keyframes popIn {
-    from { transform: scale(0.5); opacity: 0; }
-    to   { transform: scale(1);   opacity: 1; }
   }
 
   /* COPIED TOAST */
@@ -837,34 +783,7 @@ const css = `
   @keyframes spin { to { transform: rotate(360deg); } }
 `;
 
-// ─── SUPABASE SCHEMA (paste into Supabase SQL editor):
-/*
-create table puzzles (
-  id uuid primary key default gen_random_uuid(),
-  puzzle_date date unique not null,
-  rounds jsonb not null
-);
-
-create table user_stats (
-  user_id text primary key,
-  games_played int default 0,
-  games_won int default 0,
-  current_streak int default 0,
-  max_streak int default 0,
-  best_time int
-);
-
-create table game_results (
-  id uuid primary key default gen_random_uuid(),
-  user_id text,
-  puzzle_date date,
-  completed boolean,
-  time_taken int,
-  wrong_guesses int,
-  created_at timestamptz default now()
-);
-*/
-
+// ─── RESULTS MODAL ────────────────────────────────────────────────────────────
 const ResultsModal = ({
   gameStatus,
   timeLeft,
@@ -876,12 +795,6 @@ const ResultsModal = ({
   onViewStats,
   onGoHome,
   onViewArchived,
-  onPrevDay,
-  onNextDay,
-  onToday,
-  disableToday,
-  onResetPuzzle,
-  onShareLink,
 }) => (
   <div className="wl-overlay">
     <div className="wl-modal wl-results-modal">
@@ -925,7 +838,7 @@ const ResultsModal = ({
         </div>
         {stats && (
           <div className="wl-result-cell">
-            <div className="wl-result-val">{stats.current_streak} {stats.current_streak > 1 ? "🔥" : ""}</div>
+            <div className="wl-result-val">{stats.current_streak}{stats.current_streak > 1 ? " 🔥" : ""}</div>
             <div className="wl-result-label">Win Streak</div>
           </div>
         )}
@@ -945,46 +858,43 @@ const ResultsModal = ({
       {stats && (
         <button className="wl-btn wl-btn-ghost" onClick={onViewStats}>View Stats</button>
       )}
-      {gameStatus === "won" && (
-        <div className="wl-result-nav-actions">
-          <button className="wl-btn wl-btn-ghost" onClick={onGoHome}>Go Home</button>
-          <button className="wl-btn wl-btn-ghost" onClick={onViewArchived} aria-label="Open archived puzzle calendar">📅</button>
-        </div>
-      )}
-      <div className="wl-result-dev-actions">
-        <button className="wl-mini-btn" onClick={onPrevDay} aria-label="Previous day">← Day</button>
-        <button className="wl-mini-btn" onClick={onNextDay} aria-label="Next day">Day →</button>
-        <button className="wl-mini-btn" onClick={onToday} aria-label="Go to today" disabled={disableToday}>Today</button>
-        <button className="wl-mini-btn" onClick={onResetPuzzle}>Reset Puzzle</button>
-        <button className="wl-mini-btn" onClick={onShareLink}>Share Link</button>
+      <div className="wl-result-nav-actions">
+        <button className="wl-btn wl-btn-ghost" onClick={onGoHome} aria-label="Go home">🏠</button>
+        <button className="wl-btn wl-btn-ghost" onClick={onViewArchived} aria-label="Browse past puzzles">📅 Past Puzzles</button>
       </div>
     </div>
   </div>
 );
 
-const ArchiveDatesModal = ({ archivedDates, loadingArchiveDates, onSelectDate, onClose }) => (
+// ─── ARCHIVE MODAL ────────────────────────────────────────────────────────────
+const ArchiveDatesModal = ({ archivedDates, loadingArchiveDates, today, onSelectDate, onClose }) => (
   <div className="wl-overlay" onClick={onClose}>
     <div className="wl-modal wl-archive-modal" onClick={(e) => e.stopPropagation()}>
       <div className="wl-stats-header">
-        <div className="wl-modal-title" style={{ fontSize: 24 }}>Archived Games</div>
+        <div className="wl-modal-title" style={{ fontSize: 24 }}>Past Puzzles</div>
         <button
           onClick={onClose}
           style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 22 }}
-          aria-label="Close archived games modal"
+          aria-label="Close"
         >×</button>
       </div>
-      <div className="wl-modal-sub" style={{ marginTop: 8 }}>
-        Choose a date to replay that puzzle.
+      <div className="wl-modal-sub" style={{ marginTop: -8, marginBottom: 0 }}>
+        Choose any date to play that puzzle.
       </div>
       {loadingArchiveDates ? (
-        <div className="wl-archive-empty">Loading your previous games…</div>
+        <div className="wl-archive-empty">Loading puzzles…</div>
       ) : archivedDates.length === 0 ? (
-        <div className="wl-archive-empty">No previous games found yet.</div>
+        <div className="wl-archive-empty">No past puzzles found.</div>
       ) : (
         <div className="wl-archive-list">
           {archivedDates.map((date) => (
-            <button key={date} className="wl-archive-date-btn" onClick={() => onSelectDate(date)}>
-              {date}
+            <button
+              key={date}
+              className={`wl-archive-date-btn ${date === today ? "today" : ""}`}
+              onClick={() => onSelectDate(date)}
+            >
+              <span>{date}</span>
+              {date === today && <span className="wl-archive-date-tag">Today</span>}
             </button>
           ))}
         </div>
@@ -998,11 +908,9 @@ export default function WordLinkGame() {
   useEffect(() => {
     const savedVersion = localStorage.getItem("wl_cache_version");
     if (savedVersion === APP_CACHE_VERSION) return;
-
     Object.keys(localStorage)
-      .filter((key) => key.startsWith("wl_"))
+      .filter((key) => key.startsWith("wl_") && key !== "wl_seen_help" && key !== "wl_user_id")
       .forEach((key) => localStorage.removeItem(key));
-
     localStorage.setItem("wl_cache_version", APP_CACHE_VERSION);
   }, []);
 
@@ -1024,13 +932,16 @@ export default function WordLinkGame() {
   const [completed, setCompleted] = useState([false, false, false, false]);
   const [wrongGuesses, setWrongGuesses] = useState(0);
   const [timeLeft, setTimeLeft] = useState(TOTAL_TIME);
-  const [gameStatus, setGameStatus] = useState("playing"); // playing | won | lost
+  const [gameStatus, setGameStatus] = useState("playing");
   const [shakingRound, setShakingRound] = useState(null);
   const [pulseRoundIdx, setPulseRoundIdx] = useState(null);
   const [errorMsgs, setErrorMsgs] = useState(["", "", "", ""]);
   const [stats, setStats] = useState(null);
-  const [screen, setScreen] = useState("home"); // home | game | stats | results
-  const [showHelp, setShowHelp] = useState(false);
+  const [screen, setScreen] = useState("home");
+  const [showHelp, setShowHelp] = useState(() => {
+    const seen = localStorage.getItem("wl_seen_help");
+    return !seen;
+  });
   const [showCopied, setShowCopied] = useState(false);
   const [showArchiveModal, setShowArchiveModal] = useState(false);
   const [archivedDates, setArchivedDates] = useState([]);
@@ -1044,17 +955,15 @@ export default function WordLinkGame() {
   const gameStatusRef = useRef("playing");
   const archivePickerRef = useRef(null);
 
-  // Keep ref in sync
   useEffect(() => { gameStatusRef.current = gameStatus; }, [gameStatus]);
 
-  // ESC closes any open modal/overlay
   useEffect(() => {
     const handler = (e) => {
       if (e.key !== "Escape") return;
       if (showArchivePicker) { setShowArchivePicker(false); return; }
       if (showArchiveModal) { setShowArchiveModal(false); return; }
-      if (showHelp)  { setShowHelp(false); return; }
-      if (showCopied){ setShowCopied(false); return; }
+      if (showHelp) { setShowHelp(false); localStorage.setItem("wl_seen_help", "1"); return; }
+      if (showCopied) { setShowCopied(false); return; }
       if (screen === "stats") { setScreen("results"); return; }
     };
     window.addEventListener("keydown", handler);
@@ -1063,13 +972,11 @@ export default function WordLinkGame() {
 
   useEffect(() => {
     if (!showArchivePicker) return;
-
     const handleOutsideClick = (event) => {
       if (!archivePickerRef.current?.contains(event.target)) {
         setShowArchivePicker(false);
       }
     };
-
     window.addEventListener("mousedown", handleOutsideClick);
     window.addEventListener("touchstart", handleOutsideClick);
     return () => {
@@ -1097,45 +1004,25 @@ export default function WordLinkGame() {
     letterInputRefs.current[roundIdx]?.[letterIdx]?.focus();
   }, []);
 
-  const resetPuzzleProgress = () => {
-    localStorage.removeItem(`wl_played_${activeDate}`);
-    resetBoard();
-    setScreen("game");
-  };
-
-  const goToRelativeDay = (deltaDays) => {
-    setActiveDate(shiftDate(activeDate, deltaDays));
-  };
-
-  const sharePuzzleLink = () => {
-    const url = new URL(window.location.href);
-    writeDateParam(url, activeDate, today);
-    navigator.clipboard.writeText(url.toString()).catch(() => {});
-    setShowCopied(true);
-    setTimeout(() => setShowCopied(false), 2500);
-  };
-
+  // ── Open archive modal — fetch ALL puzzle dates up to today ──
   const openArchiveModal = useCallback(async () => {
     setShowArchiveModal(true);
     setLoadingArchiveDates(true);
-    const uid = getUserId();
-
     try {
       const { data } = await supabase
-        .from("game_results")
+        .from("puzzles")
         .select("puzzle_date")
-        .eq("user_id", uid)
-        .order("puzzle_date", { ascending: false })
-        .limit(60);
+        .lte("puzzle_date", today)
+        .order("puzzle_date", { ascending: false });
 
-      const uniqueDates = [...new Set((data || []).map((row) => row.puzzle_date).filter(Boolean))];
-      setArchivedDates(uniqueDates);
+      const dates = (data || []).map((row) => row.puzzle_date).filter(Boolean);
+      setArchivedDates(dates);
     } catch (_) {
       setArchivedDates([]);
     } finally {
       setLoadingArchiveDates(false);
     }
-  }, []);
+  }, [today]);
 
   // ── Load puzzle ──
   useEffect(() => {
@@ -1156,10 +1043,9 @@ export default function WordLinkGame() {
         p = { ...FALLBACK_PUZZLE, puzzle_date: activeDate };
         setArchiveMsg(activeDate === today
           ? "Today's live puzzle is unavailable — using practice puzzle."
-          : "No archived puzzle found for this date — showing practice puzzle.");
+          : "No puzzle found for this date — showing practice puzzle.");
       }
 
-      // Normalise words to uppercase
       p = {
         ...p,
         rounds: p.rounds.map((r) => ({
@@ -1169,11 +1055,11 @@ export default function WordLinkGame() {
       };
       setPuzzle(p);
       resetBoard();
+
       const url = new URL(window.location.href);
       writeDateParam(url, activeDate, today);
       window.history.replaceState({}, "", url);
 
-      // Restore completed puzzle results for today's date
       const savedResult = activeDate === today ? localStorage.getItem(`wl_played_${today}`) : null;
       if (savedResult) {
         const saved = JSON.parse(savedResult);
@@ -1213,7 +1099,6 @@ export default function WordLinkGame() {
     return () => clearTimeout(pulseTimer);
   }, [activeRoundIdx, gameStatus, screen]);
 
-  // ── Load stats ──
   const loadStats = async () => {
     const uid = getUserId();
     try {
@@ -1249,7 +1134,6 @@ export default function WordLinkGame() {
 
     setTimeout(() => setScreen("results"), 600);
 
-    // Persist result so user can't replay today
     const finalCompleted = overrides.completed ?? completed;
     const finalWrongGuesses = overrides.wrongGuesses ?? wrongGuesses;
     const finalTimeLeft = overrides.timeLeft ?? timeLeft;
@@ -1315,18 +1199,14 @@ export default function WordLinkGame() {
       }
       if (newCompleted.every(Boolean)) triggerEndGame("won", { completed: newCompleted });
     } else {
-      // Shake
       setShakingRound(roundIdx);
       setTimeout(() => setShakingRound(null), 500);
 
-      // Count wrong guesses for this round and reveal next hint letter
       const newWrongPerRound = wrongPerRound.map((w, i) => (i === roundIdx ? w + 1 : w));
       setWrongPerRound(newWrongPerRound);
       const totalWrongNext = wrongGuesses + 1;
 
-      // Reveal hint: wrongPerRound[roundIdx] tells us how many wrong for this round
-      // Reveal letter at index = newWrongPerRound[roundIdx] - 1, but not on the losing guess
-      const lettersRevealed = newWrongPerRound[roundIdx]; // 1 after first wrong
+      const lettersRevealed = newWrongPerRound[roundIdx];
       const hintChar = answer[lettersRevealed - 1] ?? null;
       const isLosingGuess = totalWrongNext >= MAX_WRONG;
 
@@ -1383,10 +1263,7 @@ export default function WordLinkGame() {
 
   const handleLetterKey = (e, roundIdx, letterIdx) => {
     const lockedCount = hintLetters[roundIdx].length;
-    if (e.key === "Enter") {
-      submitGuess(roundIdx);
-      return;
-    }
+    if (e.key === "Enter") { submitGuess(roundIdx); return; }
     if (e.key === "ArrowLeft") {
       e.preventDefault();
       focusLetter(roundIdx, Math.max(lockedCount, letterIdx - 1));
@@ -1394,8 +1271,7 @@ export default function WordLinkGame() {
     }
     if (e.key === "ArrowRight") {
       e.preventDefault();
-      const maxIdx = puzzle.rounds[roundIdx].answer.length - 1;
-      focusLetter(roundIdx, Math.min(maxIdx, letterIdx + 1));
+      focusLetter(roundIdx, Math.min(puzzle.rounds[roundIdx].answer.length - 1, letterIdx + 1));
       return;
     }
     if (e.key === "Backspace" && !guesses[roundIdx][letterIdx] && letterIdx > lockedCount) {
@@ -1404,18 +1280,13 @@ export default function WordLinkGame() {
       setGuesses((g) => {
         const chars = g[roundIdx].slice(0, puzzle.rounds[roundIdx].answer.length).split("");
         chars[previousIdx] = "";
-        const nextGuess = chars.join("");
-        return g.map((guess, i) => (i === roundIdx ? nextGuess : guess));
+        return g.map((guess, i) => (i === roundIdx ? chars.join("") : guess));
       });
       if (errorMsgs[roundIdx]) setErrorMsgs((em) => em.map((m, i) => (i === roundIdx ? "" : m)));
       focusLetter(roundIdx, previousIdx);
     }
   };
 
-  const timerPct = (timeLeft / TOTAL_TIME) * 100;
-  const isLow = timeLeft < 30;
-  const wrongDanger = wrongGuesses >= MAX_WRONG - 1;
-  // ── SHARE ──
   const shareResults = () => {
     const gameUrl = new URL(window.location.href);
     writeDateParam(gameUrl, activeDate, today);
@@ -1431,7 +1302,11 @@ export default function WordLinkGame() {
     setTimeout(() => setShowCopied(false), 2500);
   };
 
-  // ─── SCREENS ────────────────────────────────────────────────────────────────
+  const timerPct = (timeLeft / TOTAL_TIME) * 100;
+  const isLow = timeLeft < 30;
+  const wrongDanger = wrongGuesses >= MAX_WRONG - 1;
+
+  // ─── RENDER ──────────────────────────────────────────────────────────────────
 
   if (loading) {
     return (
@@ -1464,7 +1339,7 @@ export default function WordLinkGame() {
             </button>
             <div ref={archivePickerRef} style={{ display: "flex", alignItems: "center", gap: 8, position: "relative" }}>
               <div className="wl-date">{puzzle.puzzle_date}</div>
-              <button className="wl-calendar-btn" onClick={() => setShowArchivePicker((v) => !v)} aria-label="Open archived puzzle calendar">📅</button>
+              <button className="wl-calendar-btn" onClick={openArchiveModal} aria-label="Browse past puzzles">📅</button>
               <button
                 onClick={() => setShowHelp(true)}
                 style={{
@@ -1484,22 +1359,6 @@ export default function WordLinkGame() {
                 onMouseOut={e => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.color = "var(--text-muted)"; }}
                 aria-label="How to play"
               >?</button>
-              {showArchivePicker && (
-                <div className="wl-archive-popover">
-                  <div className="wl-archive-label">Play archived puzzle</div>
-                  <input
-                    className="wl-date-input"
-                    type="date"
-                    max={today}
-                    value={activeDate}
-                    onChange={(e) => {
-                      if (!e.target.value) return;
-                      setActiveDate(e.target.value);
-                      setShowArchivePicker(false);
-                    }}
-                  />
-                </div>
-              )}
             </div>
           </header>
         </div>
@@ -1564,10 +1423,6 @@ export default function WordLinkGame() {
             <button className="wl-btn wl-btn-primary" style={{ maxWidth: 320 }} onClick={() => setScreen("game")}>
               Play Today's Puzzle
             </button>
-            <div className="wl-result-dev-actions" style={{ marginTop: 14 }}>
-              <button className="wl-mini-btn" onClick={resetPuzzleProgress}>Reset Puzzle</button>
-              <button className="wl-mini-btn" onClick={() => goToRelativeDay(1)}>Simulate +1 Day</button>
-            </div>
           </div>
         )}
 
@@ -1685,28 +1540,21 @@ export default function WordLinkGame() {
             onShareResults={shareResults}
             onViewStats={() => setScreen("stats")}
             onGoHome={() => {
-              setShowArchivePicker(false);
               setShowArchiveModal(false);
               setScreen("home");
             }}
             onViewArchived={openArchiveModal}
-            onPrevDay={() => goToRelativeDay(-1)}
-            onNextDay={() => goToRelativeDay(1)}
-            onToday={() => setActiveDate(today)}
-            disableToday={activeDate === today}
-            onResetPuzzle={resetPuzzleProgress}
-            onShareLink={sharePuzzleLink}
           />
         )}
 
-
+        {/* ARCHIVE MODAL */}
         {showArchiveModal && (
           <ArchiveDatesModal
             archivedDates={archivedDates}
             loadingArchiveDates={loadingArchiveDates}
+            today={today}
             onSelectDate={(date) => {
               setShowArchiveModal(false);
-              setShowArchivePicker(false);
               setScreen("game");
               setActiveDate(date);
             }}
@@ -1757,22 +1605,26 @@ export default function WordLinkGame() {
           </div>
         )}
 
-        {/* HELP MODAL */}
         {showHelp && (
-          <div className="wl-overlay" onClick={() => setShowHelp(false)}>
+          <div className="wl-overlay" onClick={() => { setShowHelp(false); localStorage.setItem("wl_seen_help", "1"); }}>
             <div className="wl-modal" onClick={e => e.stopPropagation()}>
               <div className="wl-stats-header" style={{ marginBottom: 16 }}>
                 <div className="wl-modal-title" style={{ fontSize: 24 }}>How to Play</div>
                 <button
-                  onClick={() => setShowHelp(false)}
+                  onClick={() => { setShowHelp(false); localStorage.setItem("wl_seen_help", "1"); }}
                   style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 22 }}
                 >×</button>
               </div>
-
+              <p style={{
+                fontFamily: "var(--font-body)",
+                fontSize: 13,
+                color: "var(--text-muted)",
+                lineHeight: 1.6,
+                marginBottom: 16,
+              }}>
+                Enter one word per round that can pair with all three clues, either before or after each clue word.
+              </p>
               <div className="wl-howto-example">
-                <p style={{ marginBottom: 10 }}>
-                  Enter one word per round that can pair with all three clues, either before or after each clue word.
-                </p>
                 <p>Example:</p>
                 <div className="ex-words">
                   <div className="ex-word">Heart</div>
@@ -1781,15 +1633,13 @@ export default function WordLinkGame() {
                 </div>
                 <div className="ex-answer">→ BREAK &nbsp;<span style={{ color: "var(--text-muted)", fontSize: 11 }}>heartbreak · breakfast · breakdown</span></div>
               </div>
-
               <div className="wl-rules" style={{ marginBottom: 8 }}>
                 <div className="wl-rule"><div className="wl-rule-icon">⏱</div> You have <strong>&nbsp;3 minutes</strong></div>
                 <div className="wl-rule"><div className="wl-rule-icon">❌</div> Only <strong>&nbsp;4 wrong guesses</strong> allowed</div>
                 <div className="wl-rule"><div className="wl-rule-icon">🔗</div> Word can come before OR after each clue</div>
                 <div className="wl-rule"><div className="wl-rule-icon">🎯</div> Solve all 4 rounds to win</div>
               </div>
-
-              <button className="wl-btn wl-btn-ghost" onClick={() => setShowHelp(false)} style={{ marginTop: 16 }}>Got it</button>
+              <button className="wl-btn wl-btn-ghost" onClick={() => { setShowHelp(false); localStorage.setItem("wl_seen_help", "1"); }} style={{ marginTop: 16 }}>Got it</button>
             </div>
           </div>
         )}
