@@ -1609,8 +1609,7 @@ export default function WordLinkGame() {
               setScreen("home");
             }}
             onViewArchived={() => {
-              setScreen("game");
-              setShowArchivePicker(true);
+              setShowArchivePicker((isOpen) => !isOpen);
             }}
             onPrevDay={() => goToRelativeDay(-1)}
             onNextDay={() => goToRelativeDay(1)}
