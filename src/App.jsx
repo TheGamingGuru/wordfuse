@@ -754,6 +754,10 @@ create table game_results (
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export default function WordLinkGame() {
+  useEffect(() => {
+    document.title = "WordFuse";
+  }, []);
+
   const today = getTodayEST();
   const [puzzle, setPuzzle] = useState(null);
   const [loading, setLoading] = useState(true);
