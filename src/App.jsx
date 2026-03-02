@@ -14,10 +14,10 @@ const APP_CACHE_VERSION = "2026-03-02";
 const FALLBACK_PUZZLE = {
   puzzle_date: "2024-01-01",
   rounds: [
-    { words: ["HEART", "FAST", "DOWN"], answer: "break" },
-    { words: ["WATER", "HOUSE", "BACK"], answer: "light" },
-    { words: ["SUN", "EYE", "BALL"], answer: "fire" },
-    { words: ["TOOTH", "HAIR", "HAND"], answer: "brush" },
+    { words: ["PAY", "SPOT", "MATE"], answer: "check" },
+    { words: ["BASKET", "BLANKET", "TABLE"], answer: "picnic" },
+    { words: ["CASH", "BALL", "HUSH"], answer: "money" },
+    { words: ["BLUE", "LINE", "DIVE"], answer: "sky" },
   ],
 };
 
