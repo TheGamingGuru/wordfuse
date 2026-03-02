@@ -695,6 +695,40 @@ const css = `
   .wl-results-modal .wl-btn-ghost {
     margin-top: 6px;
   }
+  .wl-archive-modal {
+    max-width: 420px;
+  }
+  .wl-archive-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 20px 0;
+    max-height: 260px;
+    overflow-y: auto;
+  }
+  .wl-archive-date-btn {
+    width: 100%;
+    text-align: left;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-family: var(--font-mono);
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s;
+  }
+  .wl-archive-date-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .wl-archive-empty {
+    margin: 18px 0;
+    text-align: center;
+    color: var(--text-muted);
+    font-family: var(--font-body);
+    font-size: 14px;
+  }
   .wl-result-dev-actions {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -928,6 +962,37 @@ const ResultsModal = ({
   </div>
 );
 
+const ArchiveDatesModal = ({ archivedDates, loadingArchiveDates, onSelectDate, onClose }) => (
+  <div className="wl-overlay" onClick={onClose}>
+    <div className="wl-modal wl-archive-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="wl-stats-header">
+        <div className="wl-modal-title" style={{ fontSize: 24 }}>Archived Games</div>
+        <button
+          onClick={onClose}
+          style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 22 }}
+          aria-label="Close archived games modal"
+        >×</button>
+      </div>
+      <div className="wl-modal-sub" style={{ marginTop: 8 }}>
+        Choose a date to replay that puzzle.
+      </div>
+      {loadingArchiveDates ? (
+        <div className="wl-archive-empty">Loading your previous games…</div>
+      ) : archivedDates.length === 0 ? (
+        <div className="wl-archive-empty">No previous games found yet.</div>
+      ) : (
+        <div className="wl-archive-list">
+          {archivedDates.map((date) => (
+            <button key={date} className="wl-archive-date-btn" onClick={() => onSelectDate(date)}>
+              {date}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  </div>
+);
+
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export default function WordLinkGame() {
   useEffect(() => {
@@ -967,6 +1032,9 @@ export default function WordLinkGame() {
   const [screen, setScreen] = useState("home"); // home | game | stats | results
   const [showHelp, setShowHelp] = useState(false);
   const [showCopied, setShowCopied] = useState(false);
+  const [showArchiveModal, setShowArchiveModal] = useState(false);
+  const [archivedDates, setArchivedDates] = useState([]);
+  const [loadingArchiveDates, setLoadingArchiveDates] = useState(false);
   const [hintLetters, setHintLetters] = useState(["", "", "", ""]);
   const [wrongPerRound, setWrongPerRound] = useState([0, 0, 0, 0]);
   const [activeRoundIdx, setActiveRoundIdx] = useState(0);
@@ -984,13 +1052,14 @@ export default function WordLinkGame() {
     const handler = (e) => {
       if (e.key !== "Escape") return;
       if (showArchivePicker) { setShowArchivePicker(false); return; }
+      if (showArchiveModal) { setShowArchiveModal(false); return; }
       if (showHelp)  { setShowHelp(false); return; }
       if (showCopied){ setShowCopied(false); return; }
       if (screen === "stats") { setScreen("results"); return; }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [showArchivePicker, showHelp, showCopied, screen]);
+  }, [showArchivePicker, showArchiveModal, showHelp, showCopied, screen]);
 
   useEffect(() => {
     if (!showArchivePicker) return;
@@ -1045,6 +1114,28 @@ export default function WordLinkGame() {
     setShowCopied(true);
     setTimeout(() => setShowCopied(false), 2500);
   };
+
+  const openArchiveModal = useCallback(async () => {
+    setShowArchiveModal(true);
+    setLoadingArchiveDates(true);
+    const uid = getUserId();
+
+    try {
+      const { data } = await supabase
+        .from("game_results")
+        .select("puzzle_date")
+        .eq("user_id", uid)
+        .order("puzzle_date", { ascending: false })
+        .limit(60);
+
+      const uniqueDates = [...new Set((data || []).map((row) => row.puzzle_date).filter(Boolean))];
+      setArchivedDates(uniqueDates);
+    } catch (_) {
+      setArchivedDates([]);
+    } finally {
+      setLoadingArchiveDates(false);
+    }
+  }, []);
 
   // ── Load puzzle ──
   useEffect(() => {
@@ -1606,17 +1697,31 @@ export default function WordLinkGame() {
             onViewStats={() => setScreen("stats")}
             onGoHome={() => {
               setShowArchivePicker(false);
+              setShowArchiveModal(false);
               setScreen("home");
             }}
-            onViewArchived={() => {
-              setShowArchivePicker((isOpen) => !isOpen);
-            }}
+            onViewArchived={openArchiveModal}
             onPrevDay={() => goToRelativeDay(-1)}
             onNextDay={() => goToRelativeDay(1)}
             onToday={() => setActiveDate(today)}
             disableToday={activeDate === today}
             onResetPuzzle={resetPuzzleProgress}
             onShareLink={sharePuzzleLink}
+          />
+        )}
+
+
+        {showArchiveModal && (
+          <ArchiveDatesModal
+            archivedDates={archivedDates}
+            loadingArchiveDates={loadingArchiveDates}
+            onSelectDate={(date) => {
+              setShowArchiveModal(false);
+              setShowArchivePicker(false);
+              setScreen("game");
+              setActiveDate(date);
+            }}
+            onClose={() => setShowArchiveModal(false)}
           />
         )}
 
