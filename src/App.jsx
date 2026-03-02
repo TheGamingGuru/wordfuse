@@ -1092,7 +1092,15 @@ export default function WordLinkGame() {
     }
     if (e.key === "Backspace" && !guesses[roundIdx][letterIdx] && letterIdx > lockedCount) {
       e.preventDefault();
-      focusLetter(roundIdx, letterIdx - 1);
+      const previousIdx = letterIdx - 1;
+      setGuesses((g) => {
+        const chars = g[roundIdx].slice(0, puzzle.rounds[roundIdx].answer.length).split("");
+        chars[previousIdx] = "";
+        const nextGuess = chars.join("");
+        return g.map((guess, i) => (i === roundIdx ? nextGuess : guess));
+      });
+      if (errorMsgs[roundIdx]) setErrorMsgs((em) => em.map((m, i) => (i === roundIdx ? "" : m)));
+      focusLetter(roundIdx, previousIdx);
     }
   };
 
