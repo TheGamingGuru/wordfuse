@@ -786,6 +786,7 @@ export default function WordLinkGame() {
   const letterInputRefs = useRef([[], [], [], []]);
   const roundRefs = useRef([]);
   const gameStatusRef = useRef("playing");
+  const archivePickerRef = useRef(null);
 
   // Keep ref in sync
   useEffect(() => { gameStatusRef.current = gameStatus; }, [gameStatus]);
@@ -794,13 +795,31 @@ export default function WordLinkGame() {
   useEffect(() => {
     const handler = (e) => {
       if (e.key !== "Escape") return;
+      if (showArchivePicker) { setShowArchivePicker(false); return; }
       if (showHelp)  { setShowHelp(false); return; }
       if (showCopied){ setShowCopied(false); return; }
       if (screen === "stats") { setScreen("results"); return; }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [showHelp, showCopied, screen]);
+  }, [showArchivePicker, showHelp, showCopied, screen]);
+
+  useEffect(() => {
+    if (!showArchivePicker) return;
+
+    const handleOutsideClick = (event) => {
+      if (!archivePickerRef.current?.contains(event.target)) {
+        setShowArchivePicker(false);
+      }
+    };
+
+    window.addEventListener("mousedown", handleOutsideClick);
+    window.addEventListener("touchstart", handleOutsideClick);
+    return () => {
+      window.removeEventListener("mousedown", handleOutsideClick);
+      window.removeEventListener("touchstart", handleOutsideClick);
+    };
+  }, [showArchivePicker]);
 
   const resetBoard = () => {
     setGuesses(["", "", "", ""]);
@@ -1155,7 +1174,7 @@ export default function WordLinkGame() {
             >
               Word<span style={{ color: "var(--accent)" }}>Fuse</span>
             </button>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, position: "relative" }}>
+            <div ref={archivePickerRef} style={{ display: "flex", alignItems: "center", gap: 8, position: "relative" }}>
               <div className="wl-date">{puzzle.puzzle_date}</div>
               <button className="wl-calendar-btn" onClick={() => setShowArchivePicker((v) => !v)} aria-label="Open archived puzzle calendar">📅</button>
               <button
