@@ -1150,7 +1150,7 @@ export default function WordLinkGame() {
   }, [screen, gameStatus]);
 
   // ── End game ──
-  const triggerEndGame = useCallback(async (status) => {
+  const triggerEndGame = useCallback(async (status, overrides = {}) => {
     if (gameStatusRef.current !== "playing") return;
     setGameStatus(status);
     gameStatusRef.current = status;
@@ -1159,17 +1159,21 @@ export default function WordLinkGame() {
     setTimeout(() => setScreen("results"), 600);
 
     // Persist result so user can't replay today
+    const finalCompleted = overrides.completed ?? completed;
+    const finalWrongGuesses = overrides.wrongGuesses ?? wrongGuesses;
+    const finalTimeLeft = overrides.timeLeft ?? timeLeft;
+    const finalHintLetters = overrides.hintLetters ?? hintLetters;
     const snapshot = {
-      completed,
-      wrongGuesses,
-      timeLeft,
-      hintLetters,
+      completed: finalCompleted,
+      wrongGuesses: finalWrongGuesses,
+      timeLeft: finalTimeLeft,
+      hintLetters: finalHintLetters,
       gameStatus: status,
     };
     if (activeDate === today) localStorage.setItem(`wl_played_${today}`, JSON.stringify(snapshot));
 
     const uid = getUserId();
-    const timeTaken = TOTAL_TIME - timeLeft;
+    const timeTaken = TOTAL_TIME - finalTimeLeft;
     const isWin = status === "won";
 
     try {
@@ -1191,7 +1195,7 @@ export default function WordLinkGame() {
         puzzle_date: puzzle.puzzle_date,
         completed: isWin,
         time_taken: timeTaken,
-        wrong_guesses: wrongGuesses,
+        wrong_guesses: finalWrongGuesses,
       });
     } catch (_) {}
   }, [timeLeft, wrongGuesses, puzzle, activeDate, today, completed, hintLetters]);
@@ -1218,7 +1222,7 @@ export default function WordLinkGame() {
         setActiveRoundIdx(nextRound);
         setTimeout(() => focusLetter(nextRound, hintLetters[nextRound].length), 10);
       }
-      if (newCompleted.every(Boolean)) triggerEndGame("won");
+      if (newCompleted.every(Boolean)) triggerEndGame("won", { completed: newCompleted });
     } else {
       // Shake
       setShakingRound(roundIdx);
