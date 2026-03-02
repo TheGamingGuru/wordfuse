@@ -6,7 +6,7 @@ const SUPABASE_URL = 'https://zznhpbacuxeusaogvjtg.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp6bmhwYmFjdXhldXNhb2d2anRnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE4NTY0NzEsImV4cCI6MjA4NzQzMjQ3MX0.PZCulp9d0aGF-OAv6_lkNGs6elB6Q3hYH7U4XniydLk';
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-const TOTAL_TIME = 120;
+const TOTAL_TIME = 180;
 const MAX_WRONG = 4;
 
 // ─── FALLBACK PUZZLE (used if Supabase isn't connected yet) ──────────────────
@@ -857,12 +857,11 @@ export default function WordLinkGame() {
       };
       setPuzzle(p);
       resetBoard();
-      setScreen("game");
       const url = new URL(window.location.href);
       url.searchParams.set("date", activeDate);
       window.history.replaceState({}, "", url);
 
-      // Check if user already played today's puzzle
+      // Restore completed puzzle results for today's date
       const savedResult = activeDate === today ? localStorage.getItem(`wl_played_${today}`) : null;
       if (savedResult) {
         const saved = JSON.parse(savedResult);
@@ -871,7 +870,6 @@ export default function WordLinkGame() {
         setTimeLeft(saved.timeLeft);
         setHintLetters(saved.hintLetters || ["", "", "", ""]);
         setGameStatus(saved.gameStatus);
-        setScreen("results");
       }
 
       setLoading(false);
@@ -1213,7 +1211,7 @@ export default function WordLinkGame() {
             }}>Find the word that links three clues. New puzzle every day.</div>
 
             <div style={{ display: "flex", gap: 24, marginBottom: 56, width: "100%", justifyContent: "center" }}>
-              {[["⏱", "2 min"], ["❌", "4 wrong"], ["🎯", "4 rounds"]].map(([icon, label]) => (
+              {[["⏱", "3 min"], ["❌", "4 wrong"], ["🎯", "4 rounds"]].map(([icon, label]) => (
                 <div key={label} style={{
                   display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
                   fontFamily: "var(--font-mono)", fontSize: 11,
@@ -1484,7 +1482,7 @@ export default function WordLinkGame() {
               </div>
 
               <div className="wl-rules" style={{ marginBottom: 8 }}>
-                <div className="wl-rule"><div className="wl-rule-icon">⏱</div> You have <strong>&nbsp;2 minutes</strong></div>
+                <div className="wl-rule"><div className="wl-rule-icon">⏱</div> You have <strong>&nbsp;3 minutes</strong></div>
                 <div className="wl-rule"><div className="wl-rule-icon">❌</div> Only <strong>&nbsp;4 wrong guesses</strong> allowed</div>
                 <div className="wl-rule"><div className="wl-rule-icon">🔗</div> Word can come before OR after each clue</div>
                 <div className="wl-rule"><div className="wl-rule-icon">🎯</div> Solve all 4 rounds to win</div>
