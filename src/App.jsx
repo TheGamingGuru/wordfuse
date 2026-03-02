@@ -107,8 +107,9 @@ const css = `
     justify-content: center;
     padding: 8px 0 12px;
     margin-bottom: 20px;
-    background: linear-gradient(to bottom, rgba(15, 14, 23, 0.96), rgba(15, 14, 23, 0.84), rgba(15, 14, 23, 0));
-    backdrop-filter: blur(6px);
+    background: linear-gradient(to bottom, rgba(15, 14, 23, 0.98), rgba(15, 14, 23, 0.92), rgba(15, 14, 23, 0.74), rgba(15, 14, 23, 0));
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid rgba(46, 42, 69, 0.45);
   }
 
   /* HEADER */
@@ -455,6 +456,8 @@ const css = `
   @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
   .wl-modal {
+    position: relative;
+    overflow: hidden;
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 20px;
@@ -466,6 +469,25 @@ const css = `
   @keyframes slideUp {
     from { transform: translateY(20px); opacity: 0; }
     to   { transform: translateY(0);    opacity: 1; }
+  }
+
+  .wl-win-burst {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+  }
+  .wl-win-spark {
+    position: absolute;
+    top: -14%;
+    font-size: 20px;
+    opacity: 0;
+    animation: fallCelebrate 2.6s ease-out infinite;
+  }
+  @keyframes fallCelebrate {
+    0% { transform: translate3d(0, 0, 0) rotate(0deg) scale(0.8); opacity: 0; }
+    12% { opacity: 1; }
+    100% { transform: translate3d(var(--drift), 520px, 0) rotate(520deg) scale(1.15); opacity: 0; }
   }
 
   .wl-modal-title {
@@ -1113,8 +1135,11 @@ export default function WordLinkGame() {
   const wrongDanger = wrongGuesses >= MAX_WRONG - 1;
   // ── SHARE ──
   const shareResults = () => {
+    const gameUrl = new URL(window.location.href);
+    gameUrl.searchParams.set("date", activeDate);
     const text = [
-      `🔗 WordFuse — ${puzzle.puzzle_date}`,
+      `🔗 Play WordFuse: ${gameUrl.toString()}`,
+      `📅 Puzzle: ${puzzle.puzzle_date}`,
       gameStatus === "won" ? `✅ Solved in ${formatTime(TOTAL_TIME - timeLeft)}!` : `❌ Game Over`,
       completed.map((c) => (c ? "🟩" : "🟥")).join(" "),
       `Wrong guesses: ${wrongGuesses}/${MAX_WRONG}`,
@@ -1377,6 +1402,23 @@ export default function WordLinkGame() {
         {screen === "results" && (
           <div className="wl-overlay">
             <div className="wl-modal">
+              {gameStatus === "won" && (
+                <div className="wl-win-burst" aria-hidden="true">
+                  {["✨", "🎉", "⭐", "💫", "🥳", "🎊", "✨", "⭐"].map((spark, idx) => (
+                    <span
+                      key={`${spark}-${idx}`}
+                      className="wl-win-spark"
+                      style={{
+                        left: `${8 + idx * 12}%`,
+                        animationDelay: `${idx * 0.15}s`,
+                        "--drift": `${(idx % 2 === 0 ? 1 : -1) * (18 + idx * 2)}px`,
+                      }}
+                    >
+                      {spark}
+                    </span>
+                  ))}
+                </div>
+              )}
               <div className="wl-modal-title" style={{ color: gameStatus === "won" ? "var(--green)" : "var(--accent2)" }}>
                 {gameStatus === "won" ? "You got it!" : "Game Over"}
               </div>
