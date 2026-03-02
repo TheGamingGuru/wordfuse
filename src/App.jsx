@@ -216,13 +216,16 @@ const css = `
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
     gap: 10px;
-    margin-bottom: 28px;
+    margin: 0 auto 28px;
   }
   .wl-hud-sticky {
     width: 100%;
     position: sticky;
     top: 70px;
     z-index: 15;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
     background: linear-gradient(to bottom, rgba(15, 14, 23, 0.95), rgba(15, 14, 23, 0.82), rgba(15, 14, 23, 0));
     padding-top: 4px;
   }
@@ -259,7 +262,7 @@ const css = `
     height: 3px;
     background: var(--border);
     border-radius: 2px;
-    margin-bottom: 28px;
+    margin: 0 auto 28px;
     overflow: hidden;
   }
   .wl-timer-bar {
@@ -560,8 +563,11 @@ const css = `
   }
   .wl-answer-row {
     display: flex;
+    flex-direction: column;
     align-items: center;
-    justify-content: space-between;
+    justify-content: center;
+    text-align: center;
+    gap: 4px;
     padding: 6px 0;
     border-bottom: 1px solid var(--border);
     font-size: 13px;
