@@ -56,6 +56,7 @@ const writeDateParam = (url, date, today) => {
 };
 
 const formatTime = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+const WIN_SPARKS = ["✨", "🎉", "⭐", "💫", "🥳", "🎊", "✨", "⭐"];
 
 const getUserId = () => {
   let id = localStorage.getItem("wl_user_id");
@@ -313,8 +314,25 @@ const css = `
     border-color: var(--green);
     box-shadow: 0 0 0 1px var(--green), 0 4px 24px rgba(82,214,138,0.08);
   }
+  .wl-round.active {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px rgba(232, 197, 71, 0.5), 0 8px 20px rgba(232, 197, 71, 0.08);
+  }
+  .wl-round.solved.active {
+    border-color: var(--green);
+    box-shadow: 0 0 0 1px var(--green), 0 4px 24px rgba(82,214,138,0.08);
+  }
+  .wl-round.pulse {
+    animation: roundFocusPulse 0.55s ease;
+  }
   .wl-round.shaking {
     animation: shake 0.45s cubic-bezier(.36,.07,.19,.97) both;
+  }
+
+  @keyframes roundFocusPulse {
+    0% { transform: translateY(0) scale(1); }
+    40% { transform: translateY(-2px) scale(1.008); }
+    100% { transform: translateY(0) scale(1); }
   }
 
   @keyframes shake {
@@ -662,6 +680,12 @@ const css = `
     width: 100%;
     height: 36px;
   }
+  .wl-result-nav-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 10px;
+  }
 
   /* STATS */
   .wl-stats-header {
@@ -782,6 +806,103 @@ create table game_results (
 );
 */
 
+const ResultsModal = ({
+  gameStatus,
+  timeLeft,
+  wrongGuesses,
+  completed,
+  stats,
+  puzzle,
+  onShareResults,
+  onViewStats,
+  onGoHome,
+  onViewArchived,
+  onPrevDay,
+  onNextDay,
+  onToday,
+  disableToday,
+  onResetPuzzle,
+  onShareLink,
+}) => (
+  <div className="wl-overlay">
+    <div className="wl-modal">
+      {gameStatus === "won" && (
+        <div className="wl-win-burst" aria-hidden="true">
+          {WIN_SPARKS.map((spark, idx) => (
+            <span
+              key={`${spark}-${idx}`}
+              className="wl-win-spark"
+              style={{
+                left: `${8 + idx * 12}%`,
+                animationDelay: `${idx * 0.15}s`,
+                "--drift": `${(idx % 2 === 0 ? 1 : -1) * (18 + idx * 2)}px`,
+              }}
+            >
+              {spark}
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="wl-modal-title" style={{ color: gameStatus === "won" ? "var(--green)" : "var(--accent2)" }}>
+        {gameStatus === "won" ? "You got it!" : "Game Over"}
+      </div>
+      <div className="wl-modal-sub">
+        {gameStatus === "won"
+          ? `Solved in ${formatTime(TOTAL_TIME - timeLeft)} with ${wrongGuesses} wrong guess${wrongGuesses !== 1 ? "es" : ""}`
+          : "Better luck tomorrow!"}
+      </div>
+      <div className="wl-result-grid">
+        <div className="wl-result-cell">
+          <div className="wl-result-val">{formatTime(TOTAL_TIME - timeLeft)}</div>
+          <div className="wl-result-label">Time Taken</div>
+        </div>
+        <div className="wl-result-cell">
+          <div className="wl-result-val">{wrongGuesses}/{MAX_WRONG}</div>
+          <div className="wl-result-label">Wrong Guesses</div>
+        </div>
+        <div className="wl-result-cell">
+          <div className="wl-result-val">{completed.filter(Boolean).length}/4</div>
+          <div className="wl-result-label">Rounds Solved</div>
+        </div>
+        {stats && (
+          <div className="wl-result-cell">
+            <div className="wl-result-val">{stats.current_streak} {stats.current_streak > 1 ? "🔥" : ""}</div>
+            <div className="wl-result-label">Win Streak</div>
+          </div>
+        )}
+      </div>
+      <div className="wl-answer-list">
+        <div className="wl-answer-list-title">Answers</div>
+        {puzzle.rounds.map((round, i) => (
+          <div key={i} className="wl-answer-row">
+            <span className="wl-answer-row-words">{round.words.join(" · ")}</span>
+            <span className={`wl-answer-row-ans ${completed[i] ? "correct" : "missed"}`}>
+              {completed[i] ? "✓ " : "✗ "}{round.answer.toUpperCase()}
+            </span>
+          </div>
+        ))}
+      </div>
+      <button className="wl-btn wl-btn-primary" onClick={onShareResults}>Share Results</button>
+      {stats && (
+        <button className="wl-btn wl-btn-ghost" onClick={onViewStats}>View Stats</button>
+      )}
+      {gameStatus === "won" && (
+        <div className="wl-result-nav-actions">
+          <button className="wl-btn wl-btn-ghost" onClick={onGoHome}>Go Home</button>
+          <button className="wl-btn wl-btn-ghost" onClick={onViewArchived}>Archived Games</button>
+        </div>
+      )}
+      <div className="wl-result-dev-actions">
+        <button className="wl-mini-btn" onClick={onPrevDay} aria-label="Previous day">← Day</button>
+        <button className="wl-mini-btn" onClick={onNextDay} aria-label="Next day">Day →</button>
+        <button className="wl-mini-btn" onClick={onToday} aria-label="Go to today" disabled={disableToday}>Today</button>
+        <button className="wl-mini-btn" onClick={onResetPuzzle}>Reset Puzzle</button>
+        <button className="wl-mini-btn" onClick={onShareLink}>Share Link</button>
+      </div>
+    </div>
+  </div>
+);
+
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export default function WordLinkGame() {
   useEffect(() => {
@@ -815,6 +936,7 @@ export default function WordLinkGame() {
   const [timeLeft, setTimeLeft] = useState(TOTAL_TIME);
   const [gameStatus, setGameStatus] = useState("playing"); // playing | won | lost
   const [shakingRound, setShakingRound] = useState(null);
+  const [pulseRoundIdx, setPulseRoundIdx] = useState(null);
   const [errorMsgs, setErrorMsgs] = useState(["", "", "", ""]);
   const [stats, setStats] = useState(null);
   const [screen, setScreen] = useState("home"); // home | game | stats | results
@@ -969,7 +1091,10 @@ export default function WordLinkGame() {
     if (screen !== "game" || gameStatus !== "playing") return;
     const activeRoundEl = roundRefs.current[activeRoundIdx];
     if (!activeRoundEl) return;
+    setPulseRoundIdx(activeRoundIdx);
+    const pulseTimer = setTimeout(() => setPulseRoundIdx(null), 560);
     activeRoundEl.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+    return () => clearTimeout(pulseTimer);
   }, [activeRoundIdx, gameStatus, screen]);
 
   // ── Load stats ──
@@ -1362,7 +1487,7 @@ export default function WordLinkGame() {
               <div
                 key={idx}
                 ref={(el) => { roundRefs.current[idx] = el; }}
-                className={`wl-round ${completed[idx] ? "solved" : ""} ${shakingRound === idx ? "shaking" : ""}`}
+                className={`wl-round ${completed[idx] ? "solved" : ""} ${activeRoundIdx === idx ? "active" : ""} ${pulseRoundIdx === idx ? "pulse" : ""} ${shakingRound === idx ? "shaking" : ""}`}
               >
                 <div className="wl-round-header">
                   <div className="wl-round-num">Round {idx + 1}</div>
@@ -1441,81 +1566,30 @@ export default function WordLinkGame() {
 
         {/* RESULTS SCREEN */}
         {screen === "results" && (
-          <div className="wl-overlay">
-            <div className="wl-modal">
-              {gameStatus === "won" && (
-                <div className="wl-win-burst" aria-hidden="true">
-                  {["✨", "🎉", "⭐", "💫", "🥳", "🎊", "✨", "⭐"].map((spark, idx) => (
-                    <span
-                      key={`${spark}-${idx}`}
-                      className="wl-win-spark"
-                      style={{
-                        left: `${8 + idx * 12}%`,
-                        animationDelay: `${idx * 0.15}s`,
-                        "--drift": `${(idx % 2 === 0 ? 1 : -1) * (18 + idx * 2)}px`,
-                      }}
-                    >
-                      {spark}
-                    </span>
-                  ))}
-                </div>
-              )}
-              <div className="wl-modal-title" style={{ color: gameStatus === "won" ? "var(--green)" : "var(--accent2)" }}>
-                {gameStatus === "won" ? "You got it!" : "Game Over"}
-              </div>
-              <div className="wl-modal-sub">
-                {gameStatus === "won"
-                  ? `Solved in ${formatTime(TOTAL_TIME - timeLeft)} with ${wrongGuesses} wrong guess${wrongGuesses !== 1 ? "es" : ""}`
-                  : "Better luck tomorrow!"}
-              </div>
-              <div className="wl-result-grid">
-                <div className="wl-result-cell">
-                  <div className="wl-result-val">{formatTime(TOTAL_TIME - timeLeft)}</div>
-                  <div className="wl-result-label">Time Taken</div>
-                </div>
-                <div className="wl-result-cell">
-                  <div className="wl-result-val">{wrongGuesses}/{MAX_WRONG}</div>
-                  <div className="wl-result-label">Wrong Guesses</div>
-                </div>
-                <div className="wl-result-cell">
-                  <div className="wl-result-val">{completed.filter(Boolean).length}/4</div>
-                  <div className="wl-result-label">Rounds Solved</div>
-                </div>
-                {stats && (
-                  <div className="wl-result-cell">
-                    <div className="wl-result-val">{stats.current_streak} {stats.current_streak > 1 ? "🔥" : ""}</div>
-                    <div className="wl-result-label">Win Streak</div>
-                  </div>
-                )}
-              </div>
-              <div className="wl-answer-list">
-                <div className="wl-answer-list-title">Answers</div>
-                {puzzle.rounds.map((round, i) => (
-                  <div key={i} className="wl-answer-row">
-                    <span className="wl-answer-row-words">{round.words.join(" · ")}</span>
-                    <span className={`wl-answer-row-ans ${completed[i] ? "correct" : "missed"}`}>
-                      {completed[i] ? "✓ " : "✗ "}{round.answer.toUpperCase()}
-                    </span>
-                  </div>
-                ))}
-              </div>
-              <button className="wl-btn wl-btn-primary" onClick={shareResults}>Share Results</button>
-              {stats && (
-                <button className="wl-btn wl-btn-ghost" onClick={() => setScreen("stats")}>View Stats</button>
-              )}
-              <div className="wl-result-dev-actions">
-                <button className="wl-mini-btn" onClick={() => goToRelativeDay(-1)} aria-label="Previous day">← Day</button>
-                <button
-                  className="wl-mini-btn"
-                  onClick={() => goToRelativeDay(1)}
-                  aria-label="Next day"
-                >Day →</button>
-                <button className="wl-mini-btn" onClick={() => setActiveDate(today)} aria-label="Go to today" disabled={activeDate === today}>Today</button>
-                <button className="wl-mini-btn" onClick={resetPuzzleProgress}>Reset Puzzle</button>
-                <button className="wl-mini-btn" onClick={sharePuzzleLink}>Share Link</button>
-              </div>
-            </div>
-          </div>
+          <ResultsModal
+            gameStatus={gameStatus}
+            timeLeft={timeLeft}
+            wrongGuesses={wrongGuesses}
+            completed={completed}
+            stats={stats}
+            puzzle={puzzle}
+            onShareResults={shareResults}
+            onViewStats={() => setScreen("stats")}
+            onGoHome={() => {
+              setShowArchivePicker(false);
+              setScreen("home");
+            }}
+            onViewArchived={() => {
+              setScreen("home");
+              setShowArchivePicker(true);
+            }}
+            onPrevDay={() => goToRelativeDay(-1)}
+            onNextDay={() => goToRelativeDay(1)}
+            onToday={() => setActiveDate(today)}
+            disableToday={activeDate === today}
+            onResetPuzzle={resetPuzzleProgress}
+            onShareLink={sharePuzzleLink}
+          />
         )}
 
         {/* STATS SCREEN */}
