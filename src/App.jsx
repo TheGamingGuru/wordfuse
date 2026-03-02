@@ -338,6 +338,8 @@ const css = `
     display: flex;
     gap: 8px;
     flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
   }
   .wl-letter-input {
     width: 42px;
@@ -643,39 +645,6 @@ const css = `
     to   { transform: scale(1);   opacity: 1; }
   }
 
-  .wl-letter-probe {
-    display: flex;
-    gap: 5px;
-    margin-top: 8px;
-    align-items: center;
-  }
-  .wl-letter-probe-label {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    color: var(--text-muted);
-    margin-right: 4px;
-  }
-  .wl-letter-probe-cell {
-    width: 26px;
-    height: 26px;
-    border-radius: 6px;
-    border: 1px solid var(--border);
-    background: var(--surface2);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-family: var(--font-display);
-    font-size: 13px;
-    font-weight: 700;
-    color: transparent;
-  }
-  .wl-letter-probe-cell.hit {
-    border-color: var(--green);
-    color: var(--green);
-  }
-
   /* COPIED TOAST */
   .wl-toast {
     position: fixed;
@@ -884,6 +853,13 @@ export default function WordLinkGame() {
     })();
   }, [activeDate, today]);
 
+  useEffect(() => {
+    if (screen !== "game" || gameStatus !== "playing") return;
+    if (guesses.some((guess) => guess.length > 0)) return;
+    const frame = requestAnimationFrame(() => focusLetter(0, 0));
+    return () => cancelAnimationFrame(frame);
+  }, [screen, gameStatus, guesses, focusLetter]);
+
   // ── Load stats ──
   const loadStats = async () => {
     const uid = getUserId();
@@ -1071,13 +1047,6 @@ export default function WordLinkGame() {
   const timerPct = (timeLeft / TOTAL_TIME) * 100;
   const isLow = timeLeft < 30;
   const wrongDanger = wrongGuesses >= MAX_WRONG - 1;
-  const buildProbe = (roundIdx) => {
-    const rawGuess = guesses[roundIdx].trim().toLowerCase();
-    if (!rawGuess || completed[roundIdx] || gameStatus !== "playing") return [];
-    const answer = puzzle.rounds[roundIdx].answer.toLowerCase();
-    return answer.split("").map((char, idx) => (rawGuess[idx] === char ? char.toUpperCase() : ""));
-  };
-
   // ── SHARE ──
   const shareResults = () => {
     const text = [
@@ -1161,18 +1130,6 @@ export default function WordLinkGame() {
             {archiveMsg}
           </div>
         )}
-
-        <div className="wl-toolbar">
-          <div className="wl-toolbar-group">
-            <button className="wl-mini-btn" onClick={() => goToRelativeDay(-1)} aria-label="Previous day">← Day</button>
-            <button className="wl-mini-btn" onClick={() => goToRelativeDay(1)} aria-label="Next day" disabled={activeDate >= today}>Day →</button>
-            <button className="wl-mini-btn" onClick={() => setActiveDate(today)} aria-label="Go to today" disabled={activeDate === today}>Today</button>
-          </div>
-          <div className="wl-toolbar-group">
-            <button className="wl-mini-btn" onClick={resetPuzzleProgress}>Reset</button>
-            <button className="wl-mini-btn" onClick={sharePuzzleLink}>Share Link</button>
-          </div>
-        </div>
 
         {/* HOME SCREEN */}
         {screen === "home" && (
@@ -1317,14 +1274,6 @@ export default function WordLinkGame() {
                       >Submit</button>
                     </div>
                     <div className="wl-error-msg">{errorMsgs[idx]}</div>
-                    {buildProbe(idx).length > 0 && (
-                      <div className="wl-letter-probe">
-                        <span className="wl-letter-probe-label">Letters</span>
-                        {buildProbe(idx).map((char, li) => (
-                          <div key={li} className={`wl-letter-probe-cell ${char ? "hit" : ""}`}>{char || "·"}</div>
-                        ))}
-                      </div>
-                    )}
                     {hintLetters[idx] && (
                       <div className="wl-hint">
                         <span className="wl-hint-label">Hint</span>
@@ -1391,12 +1340,16 @@ export default function WordLinkGame() {
                 <button className="wl-btn wl-btn-ghost" onClick={() => setScreen("stats")}>View Stats</button>
               )}
               <div className="wl-result-dev-actions">
-                <button className="wl-mini-btn" onClick={resetPuzzleProgress}>Reset Puzzle</button>
+                <button className="wl-mini-btn" onClick={() => goToRelativeDay(-1)} aria-label="Previous day">← Day</button>
                 <button
                   className="wl-mini-btn"
                   onClick={() => goToRelativeDay(1)}
+                  aria-label="Next day"
                   disabled={activeDate >= today}
-                >Next Day</button>
+                >Day →</button>
+                <button className="wl-mini-btn" onClick={() => setActiveDate(today)} aria-label="Go to today" disabled={activeDate === today}>Today</button>
+                <button className="wl-mini-btn" onClick={resetPuzzleProgress}>Reset Puzzle</button>
+                <button className="wl-mini-btn" onClick={sharePuzzleLink}>Share Link</button>
               </div>
             </div>
           </div>
