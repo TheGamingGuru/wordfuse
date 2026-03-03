@@ -711,11 +711,27 @@ const css = `
   .wl-archive-date-btn.today {
     border-color: var(--accent);
   }
+  /* FIX 1: Completed archive dates get a green tint */
+  .wl-archive-date-btn.completed {
+    border-color: var(--green);
+    background: color-mix(in srgb, var(--green) 8%, var(--surface2));
+  }
+  .wl-archive-date-btn.completed:hover {
+    border-color: var(--green);
+    color: var(--green);
+  }
   .wl-archive-date-tag {
     font-size: 10px;
     letter-spacing: 1px;
     text-transform: uppercase;
     color: var(--accent);
+  }
+  .wl-archive-completed-tag {
+    font-size: 12px;
+    color: var(--green);
+    display: flex;
+    align-items: center;
+    gap: 3px;
   }
   .wl-archive-empty {
     margin: 18px 0;
@@ -858,16 +874,18 @@ const ResultsModal = ({
       {stats && (
         <button className="wl-btn wl-btn-ghost" onClick={onViewStats}>View Stats</button>
       )}
+      {/* FIX 3: Archive button is now icon-only (📅) */}
       <div className="wl-result-nav-actions">
         <button className="wl-btn wl-btn-ghost" onClick={onGoHome} aria-label="Go home">🏠</button>
-        <button className="wl-btn wl-btn-ghost" onClick={onViewArchived} aria-label="Browse past puzzles">📅 Past Puzzles</button>
+        <button className="wl-btn wl-btn-ghost" onClick={onViewArchived} aria-label="Browse past puzzles">📅</button>
       </div>
     </div>
   </div>
 );
 
 // ─── ARCHIVE MODAL ────────────────────────────────────────────────────────────
-const ArchiveDatesModal = ({ archivedDates, loadingArchiveDates, today, onSelectDate, onClose }) => (
+// FIX 1: Accept completedDates set and show completion badge
+const ArchiveDatesModal = ({ archivedDates, loadingArchiveDates, today, completedDates, onSelectDate, onClose }) => (
   <div className="wl-overlay" onClick={onClose}>
     <div className="wl-modal wl-archive-modal" onClick={(e) => e.stopPropagation()}>
       <div className="wl-stats-header">
@@ -887,16 +905,24 @@ const ArchiveDatesModal = ({ archivedDates, loadingArchiveDates, today, onSelect
         <div className="wl-archive-empty">No past puzzles found.</div>
       ) : (
         <div className="wl-archive-list">
-          {archivedDates.map((date) => (
-            <button
-              key={date}
-              className={`wl-archive-date-btn ${date === today ? "today" : ""}`}
-              onClick={() => onSelectDate(date)}
-            >
-              <span>{date}</span>
-              {date === today && <span className="wl-archive-date-tag">Today</span>}
-            </button>
-          ))}
+          {archivedDates.map((date) => {
+            const isCompleted = completedDates.has(date);
+            return (
+              <button
+                key={date}
+                className={`wl-archive-date-btn ${date === today ? "today" : ""} ${isCompleted ? "completed" : ""}`}
+                onClick={() => onSelectDate(date)}
+              >
+                <span>{date}</span>
+                <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  {isCompleted && (
+                    <span className="wl-archive-completed-tag" title="Completed">✓</span>
+                  )}
+                  {date === today && <span className="wl-archive-date-tag">Today</span>}
+                </span>
+              </button>
+            );
+          })}
         </div>
       )}
     </div>
@@ -946,6 +972,8 @@ export default function WordLinkGame() {
   const [showArchiveModal, setShowArchiveModal] = useState(false);
   const [archivedDates, setArchivedDates] = useState([]);
   const [loadingArchiveDates, setLoadingArchiveDates] = useState(false);
+  // FIX 1: Track which dates the user has completed
+  const [completedDates, setCompletedDates] = useState(new Set());
   const [hintLetters, setHintLetters] = useState(["", "", "", ""]);
   const [wrongPerRound, setWrongPerRound] = useState([0, 0, 0, 0]);
   const [activeRoundIdx, setActiveRoundIdx] = useState(0);
@@ -1004,21 +1032,34 @@ export default function WordLinkGame() {
     letterInputRefs.current[roundIdx]?.[letterIdx]?.focus();
   }, []);
 
-  // ── Open archive modal — fetch ALL puzzle dates up to today ──
+  // ── Open archive modal — fetch ALL puzzle dates up to today + completed dates ──
   const openArchiveModal = useCallback(async () => {
     setShowArchiveModal(true);
     setLoadingArchiveDates(true);
     try {
-      const { data } = await supabase
+      // Fetch all puzzle dates
+      const { data: puzzleDates } = await supabase
         .from("puzzles")
         .select("puzzle_date")
         .lte("puzzle_date", today)
         .order("puzzle_date", { ascending: false });
 
-      const dates = (data || []).map((row) => row.puzzle_date).filter(Boolean);
+      const dates = (puzzleDates || []).map((row) => row.puzzle_date).filter(Boolean);
       setArchivedDates(dates);
+
+      // FIX 1: Fetch completed game results for this user
+      const uid = getUserId();
+      const { data: results } = await supabase
+        .from("game_results")
+        .select("puzzle_date")
+        .eq("user_id", uid)
+        .eq("completed", true);
+
+      const wonDates = new Set((results || []).map((r) => r.puzzle_date).filter(Boolean));
+      setCompletedDates(wonDates);
     } catch (_) {
       setArchivedDates([]);
+      setCompletedDates(new Set());
     } finally {
       setLoadingArchiveDates(false);
     }
@@ -1328,10 +1369,16 @@ export default function WordLinkGame() {
         {/* HEADER */}
         <div className="wl-header-wrap">
           <header className="wl-header">
+            {/* FIX 4: Logo click resets to today's puzzle if on an archived date */}
             <button
               type="button"
               className="wl-logo"
-              onClick={() => setScreen("home")}
+              onClick={() => {
+                if (activeDate !== today) {
+                  setActiveDate(today);
+                }
+                setScreen("home");
+              }}
               style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }}
               aria-label="Return to home"
             >
@@ -1340,10 +1387,14 @@ export default function WordLinkGame() {
             <div ref={archivePickerRef} style={{ display: "flex", alignItems: "center", gap: 8, position: "relative" }}>
               <div className="wl-date">{activeDate === today ? "Daily Game" : puzzle.puzzle_date}</div>
               <button className="wl-calendar-btn" onClick={openArchiveModal} aria-label="Browse past puzzles">📅</button>
+              {/* FIX 2: Info button is perfectly round — explicit equal width/height + border-radius 50% */}
               <button
                 onClick={() => setShowHelp(true)}
                 style={{
-                  width: 30, height: 30,
+                  width: 30,
+                  height: 30,
+                  minWidth: 30,
+                  minHeight: 30,
                   borderRadius: "50%",
                   background: "var(--surface2)",
                   border: "1px solid var(--border)",
@@ -1351,8 +1402,12 @@ export default function WordLinkGame() {
                   fontFamily: "var(--font-mono)",
                   fontSize: 14,
                   cursor: "pointer",
-                  display: "flex", alignItems: "center", justifyContent: "center",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
                   flexShrink: 0,
+                  padding: 0,
+                  lineHeight: 1,
                   transition: "border-color 0.2s, color 0.2s",
                 }}
                 onMouseOver={e => { e.currentTarget.style.borderColor = "var(--accent)"; e.currentTarget.style.color = "var(--accent)"; }}
@@ -1553,6 +1608,7 @@ export default function WordLinkGame() {
             archivedDates={archivedDates}
             loadingArchiveDates={loadingArchiveDates}
             today={today}
+            completedDates={completedDates}
             onSelectDate={(date) => {
               setShowArchiveModal(false);
               setScreen("game");
