@@ -194,7 +194,9 @@ const css = `
     font-family: var(--font-display); font-size: 20px; font-weight: 900; color: var(--text);
   }
   .wl-nav-close {
-    width: 32px; height: 32px; border-radius: 50%;
+    width: 32px; height: 32px; min-width: 32px; min-height: 32px;
+    padding: 0; line-height: 1; flex-shrink: 0;
+    border-radius: 50%;
     background: var(--surface2); border: 1px solid var(--border);
     color: var(--text-muted); cursor: pointer; font-size: 18px;
     display: flex; align-items: center; justify-content: center;
@@ -223,12 +225,13 @@ const css = `
   .wl-nav-divider { height: 1px; background: var(--border); margin: 8px 20px; }
 
   /* HUD */
-  .wl-hud { width: 100%; max-width: 560px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin: 0 auto 28px; }
+  .wl-hud { width: 100%; max-width: 560px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin: 0 auto 12px; }
   .wl-hud-sticky {
     width: 100%; position: sticky; top: 70px; z-index: 15;
     display: flex; flex-direction: column; align-items: center;
-    background: linear-gradient(to bottom, var(--hud-bg-top), var(--hud-bg-mid), rgba(0,0,0,0));
+    background: linear-gradient(to bottom, var(--hud-bg-top) 0%, var(--hud-bg-top) 80%, rgba(0,0,0,0) 100%);
     padding-top: 4px;
+    padding-bottom: 28px;
   }
   .wl-hud-cell { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; display: flex; flex-direction: column; gap: 2px; }
   .wl-hud-label { font-family: var(--font-mono); font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-muted); }
@@ -237,7 +240,7 @@ const css = `
   .wl-hud-value.danger  { color: var(--accent2); }
 
   /* TIMER BAR */
-  .wl-timer-bar-wrap { width: 100%; max-width: 560px; height: 3px; background: var(--border); border-radius: 2px; margin: 0 auto 28px; overflow: hidden; }
+  .wl-timer-bar-wrap { width: 100%; max-width: 560px; height: 4px; background: var(--border); border-radius: 2px; margin: 0 auto; overflow: hidden; }
   .wl-timer-bar { height: 100%; background: var(--accent); border-radius: 2px; transition: width 1s linear, background 0.4s; }
   .wl-timer-bar.low { background: var(--accent2); }
 
