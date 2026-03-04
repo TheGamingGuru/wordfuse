@@ -10,7 +10,6 @@ const TOTAL_TIME = 180;
 const MAX_WRONG = 4;
 const APP_CACHE_VERSION = "2026-03-02";
 
-// ─── FALLBACK PUZZLE ─────────────────────────────────────────────────────────
 const FALLBACK_PUZZLE = {
   puzzle_date: "2024-01-01",
   rounds: [
@@ -22,36 +21,43 @@ const FALLBACK_PUZZLE = {
 };
 
 // ─── UTILS ───────────────────────────────────────────────────────────────────
-const formatDateInTimeZone = (date, timeZone) => {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(date);
-  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
-  return `${values.year}-${values.month}-${values.day}`;
+const formatDateInTimeZone = (date, tz) => {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
+  const v = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  return `${v.year}-${v.month}-${v.day}`;
 };
-
 const getTodayEST = () => formatDateInTimeZone(new Date(), "America/New_York");
-
-const clampDateToToday = (isoDate, today) => (isoDate > today ? today : isoDate);
-const isISODate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value);
+const clampDateToToday = (d, today) => (d > today ? today : d);
+const isISODate = v => /^\d{4}-\d{2}-\d{2}$/.test(v);
 const writeDateParam = (url, date, today) => {
   if (date === today) { url.searchParams.delete("date"); return; }
   url.searchParams.set("date", date);
 };
-
-const formatTime = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+const formatTime = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+const formatCountdown = s => {
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+};
 const WIN_SPARKS = ["✨", "🎉", "⭐", "💫", "🥳", "🎊", "✨", "⭐"];
+const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const DAY_LABELS = ["S","M","T","W","T","F","S"];
 
 const getUserId = () => {
   let id = localStorage.getItem("wl_user_id");
-  if (!id) {
-    id = "u_" + Math.random().toString(36).slice(2, 11);
-    localStorage.setItem("wl_user_id", id);
-  }
+  if (!id) { id = "u_" + Math.random().toString(36).slice(2, 11); localStorage.setItem("wl_user_id", id); }
   return id;
+};
+
+// Seconds until midnight EST
+const secondsUntilMidnightEST = () => {
+  const now = new Date();
+  const estStr = now.toLocaleString("en-US", { timeZone: "America/New_York" });
+  const estNow = new Date(estStr);
+  const midnight = new Date(estNow);
+  midnight.setHours(24, 0, 0, 0);
+  return Math.max(0, Math.floor((midnight - estNow) / 1000));
 };
 
 // ─── STYLES ──────────────────────────────────────────────────────────────────
@@ -80,8 +86,6 @@ const css = `
     --hud-bg-top: rgba(15,14,23,0.95);
     --hud-bg-mid: rgba(15,14,23,0.82);
   }
-
-  /* ── LIGHT MODE OVERRIDES ── */
   .wl-light {
     --bg: #f4f2ed;
     --surface: #ffffff;
@@ -103,11 +107,8 @@ const css = `
   html, body, #root { width: 100%; min-height: 100vh; }
 
   .wl-root {
-    min-height: 100vh;
-    width: 100%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
+    min-height: 100vh; width: 100%;
+    display: flex; flex-direction: column; align-items: center;
     padding: 24px 16px 48px;
     background: var(--bg);
     background-image: radial-gradient(ellipse at 20% 0%, #1e1540 0%, transparent 60%),
@@ -119,462 +120,194 @@ const css = `
                       radial-gradient(ellipse at 80% 100%, #d5e8f8 0%, transparent 60%);
   }
 
+  /* HEADER */
   .wl-header-wrap {
-    position: sticky;
-    top: 0;
-    z-index: 20;
-    width: 100%;
-    display: flex;
-    justify-content: center;
-    padding: 8px 0 12px;
-    margin-bottom: 20px;
+    position: sticky; top: 0; z-index: 20; width: 100%;
+    display: flex; justify-content: center;
+    padding: 8px 0 12px; margin-bottom: 20px;
     background: linear-gradient(to bottom, var(--header-bg-top), var(--header-bg-mid), var(--header-bg-bot), rgba(0,0,0,0));
     backdrop-filter: blur(8px);
     border-bottom: 1px solid rgba(46,42,69,0.45);
   }
   .wl-light .wl-header-wrap { border-bottom-color: rgba(213,207,194,0.6); }
-
-  .wl-header {
-    width: 100%;
-    max-width: 560px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  /* ── TOOLTIP WRAPPER ── */
-  .wl-tt {
-    position: relative;
-    display: flex;
-    align-items: center;
-  }
-  .wl-tt-bubble {
-    position: absolute;
-    bottom: calc(100% + 10px);
-    left: 50%;
-    transform: translateX(-50%) translateY(4px);
-    background: var(--surface);
-    color: var(--text);
-    border: 1px solid var(--border);
-    border-radius: 7px;
-    padding: 5px 10px;
-    font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: 0.5px;
-    white-space: nowrap;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.15s ease, transform 0.15s ease;
-    box-shadow: 0 4px 14px rgba(0,0,0,0.25);
-    z-index: 50;
-  }
-  .wl-tt-bubble::after {
-    content: '';
-    position: absolute;
-    top: 100%;
-    left: 50%;
-    transform: translateX(-50%);
-    border: 5px solid transparent;
-    border-top-color: var(--border);
-  }
-  .wl-tt-bubble::before {
-    content: '';
-    position: absolute;
-    top: calc(100% - 1px);
-    left: 50%;
-    transform: translateX(-50%);
-    border: 5px solid transparent;
-    border-top-color: var(--surface);
-    z-index: 1;
-  }
-  .wl-tt:hover .wl-tt-bubble {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0);
-  }
-
-  /* ── HEADER ICON BUTTONS ── */
-  .wl-icon-btn {
-    width: 30px;
-    height: 30px;
-    min-width: 30px;
-    min-height: 30px;
-    border-radius: 50%;
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    color: var(--text-muted);
-    font-family: var(--font-mono);
-    font-size: 14px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    padding: 0;
-    line-height: 1;
-    transition: border-color 0.2s, color 0.2s, background 0.2s;
-  }
-  .wl-icon-btn:hover {
-    border-color: var(--accent);
-    color: var(--accent);
-  }
-  .wl-calendar-btn {
-    width: 30px;
-    height: 30px;
-    min-width: 30px;
-    min-height: 30px;
-    padding: 0;
-    line-height: 1;
-    overflow: hidden;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 50%;
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    color: var(--text-muted);
-    cursor: pointer;
-    font-size: 14px;
-    transition: border-color 0.2s, color 0.2s;
-  }
-  .wl-calendar-btn:hover { border-color: var(--accent); color: var(--accent); }
-
+  .wl-header { width: 100%; max-width: 560px; display: flex; justify-content: space-between; align-items: center; }
   .wl-logo {
-    font-family: var(--font-display);
-    font-size: 28px;
-    font-weight: 900;
-    letter-spacing: -0.5px;
-    color: var(--text);
+    font-family: var(--font-display); font-size: 28px; font-weight: 900;
+    letter-spacing: -0.5px; color: var(--text);
+    background: none; border: none; padding: 0; cursor: pointer;
   }
   .wl-logo span { color: var(--accent); }
-  .wl-date {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--text-muted);
-    letter-spacing: 1px;
-    text-transform: uppercase;
+  .wl-date { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); letter-spacing: 1px; text-transform: uppercase; }
+
+  /* HAMBURGER */
+  .wl-hamburger {
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 4px; padding: 0; flex-shrink: 0;
+    transition: border-color 0.2s, background 0.2s;
   }
+  .wl-hamburger:hover { border-color: var(--accent); }
+  .wl-hamburger-line {
+    width: 14px; height: 1.5px;
+    background: var(--text);
+    border-radius: 2px;
+    transition: background 0.2s;
+  }
+  .wl-hamburger:hover .wl-hamburger-line { background: var(--accent); }
+
+  /* NAV DRAWER */
+  .wl-nav-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(10,9,20,0.6);
+    backdrop-filter: blur(4px);
+    z-index: 90;
+    animation: fadeIn 0.2s ease;
+  }
+  .wl-light .wl-nav-backdrop { background: rgba(200,196,188,0.6); }
+  .wl-nav-drawer {
+    position: fixed; top: 0; right: 0; bottom: 0;
+    width: min(320px, 85vw);
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    z-index: 95;
+    display: flex; flex-direction: column;
+    padding: 24px 0 32px;
+    animation: drawerSlideIn 0.28s cubic-bezier(0.22,1,0.36,1);
+    box-shadow: -12px 0 40px rgba(0,0,0,0.25);
+  }
+  @keyframes drawerSlideIn {
+    from { transform: translateX(100%); opacity: 0; }
+    to   { transform: translateX(0);    opacity: 1; }
+  }
+  .wl-nav-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 20px 20px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 8px;
+  }
+  .wl-nav-title {
+    font-family: var(--font-display); font-size: 20px; font-weight: 900; color: var(--text);
+  }
+  .wl-nav-close {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text-muted); cursor: pointer; font-size: 18px;
+    display: flex; align-items: center; justify-content: center;
+    transition: border-color 0.2s, color 0.2s;
+  }
+  .wl-nav-close:hover { border-color: var(--accent2); color: var(--accent2); }
+  .wl-nav-item {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 20px;
+    background: none; border: none; width: 100%; text-align: left;
+    cursor: pointer; color: var(--text);
+    font-family: var(--font-body); font-size: 15px; font-weight: 500;
+    transition: background 0.15s, color 0.15s;
+    border-radius: 0;
+  }
+  .wl-nav-item:hover { background: var(--surface2); color: var(--accent); }
+  .wl-nav-item-icon {
+    width: 36px; height: 36px; border-radius: 10px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; flex-shrink: 0;
+    transition: border-color 0.15s;
+  }
+  .wl-nav-item:hover .wl-nav-item-icon { border-color: var(--accent); }
+  .wl-nav-divider { height: 1px; background: var(--border); margin: 8px 20px; }
 
   /* HUD */
-  .wl-hud {
-    width: 100%;
-    max-width: 560px;
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 10px;
-    margin: 0 auto 28px;
-  }
+  .wl-hud { width: 100%; max-width: 560px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin: 0 auto 28px; }
   .wl-hud-sticky {
-    width: 100%;
-    position: sticky;
-    top: 70px;
-    z-index: 15;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
+    width: 100%; position: sticky; top: 70px; z-index: 15;
+    display: flex; flex-direction: column; align-items: center;
     background: linear-gradient(to bottom, var(--hud-bg-top), var(--hud-bg-mid), rgba(0,0,0,0));
     padding-top: 4px;
   }
-  .wl-hud-cell {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 12px 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-  .wl-hud-label {
-    font-family: var(--font-mono);
-    font-size: 9px;
-    letter-spacing: 1.5px;
-    text-transform: uppercase;
-    color: var(--text-muted);
-  }
-  .wl-hud-value {
-    font-family: var(--font-mono);
-    font-size: 24px;
-    font-weight: 500;
-    color: var(--text);
-    line-height: 1;
-  }
+  .wl-hud-cell { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; display: flex; flex-direction: column; gap: 2px; }
+  .wl-hud-label { font-family: var(--font-mono); font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-muted); }
+  .wl-hud-value { font-family: var(--font-mono); font-size: 24px; font-weight: 500; color: var(--text); line-height: 1; }
   .wl-hud-value.warning { color: var(--accent); }
   .wl-hud-value.danger  { color: var(--accent2); }
 
   /* TIMER BAR */
-  .wl-timer-bar-wrap {
-    width: 100%;
-    max-width: 560px;
-    height: 3px;
-    background: var(--border);
-    border-radius: 2px;
-    margin: 0 auto 28px;
-    overflow: hidden;
-  }
-  .wl-timer-bar {
-    height: 100%;
-    background: var(--accent);
-    border-radius: 2px;
-    transition: width 1s linear, background 0.4s;
-  }
+  .wl-timer-bar-wrap { width: 100%; max-width: 560px; height: 3px; background: var(--border); border-radius: 2px; margin: 0 auto 28px; overflow: hidden; }
+  .wl-timer-bar { height: 100%; background: var(--accent); border-radius: 2px; transition: width 1s linear, background 0.4s; }
   .wl-timer-bar.low { background: var(--accent2); }
 
   /* ROUNDS */
-  .wl-rounds {
-    width: 100%;
-    max-width: 560px;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-  }
-  .wl-round {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    padding: 20px;
-    transition: border-color 0.3s, box-shadow 0.3s;
-  }
-  .wl-round.solved {
-    border-color: var(--green);
-    box-shadow: 0 0 0 1px var(--green), 0 4px 24px rgba(82,214,138,0.08);
-  }
-  .wl-round.active {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 1px rgba(232,197,71,0.5), 0 8px 20px rgba(232,197,71,0.08);
-  }
-  .wl-round.solved.active {
-    border-color: var(--green);
-    box-shadow: 0 0 0 1px var(--green), 0 4px 24px rgba(82,214,138,0.08);
-  }
+  .wl-rounds { width: 100%; max-width: 560px; display: flex; flex-direction: column; gap: 14px; }
+  .wl-round { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 20px; transition: border-color 0.3s, box-shadow 0.3s; }
+  .wl-round.solved { border-color: var(--green); box-shadow: 0 0 0 1px var(--green), 0 4px 24px rgba(82,214,138,0.08); }
+  .wl-round.active { border-color: var(--accent); box-shadow: 0 0 0 1px rgba(232,197,71,0.5), 0 8px 20px rgba(232,197,71,0.08); }
+  .wl-round.solved.active { border-color: var(--green); box-shadow: 0 0 0 1px var(--green), 0 4px 24px rgba(82,214,138,0.08); }
   .wl-round.pulse { animation: roundFocusPulse 0.55s ease; }
   .wl-round.shaking { animation: shake 0.45s cubic-bezier(.36,.07,.19,.97) both; }
+  @keyframes roundFocusPulse { 0% { transform: translateY(0) scale(1); } 40% { transform: translateY(-2px) scale(1.008); } 100% { transform: translateY(0) scale(1); } }
+  @keyframes shake { 0%,100% { transform: translateX(0); } 15% { transform: translateX(-6px); } 30% { transform: translateX(6px); } 45% { transform: translateX(-5px); } 60% { transform: translateX(5px); } 75% { transform: translateX(-3px); } 90% { transform: translateX(3px); } }
 
-  @keyframes roundFocusPulse {
-    0% { transform: translateY(0) scale(1); }
-    40% { transform: translateY(-2px) scale(1.008); }
-    100% { transform: translateY(0) scale(1); }
-  }
-  @keyframes shake {
-    0%,100% { transform: translateX(0); }
-    15%      { transform: translateX(-6px); }
-    30%      { transform: translateX(6px); }
-    45%      { transform: translateX(-5px); }
-    60%      { transform: translateX(5px); }
-    75%      { transform: translateX(-3px); }
-    90%      { transform: translateX(3px); }
-  }
+  .wl-round-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .wl-round-num { font-family: var(--font-mono); font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-muted); }
+  .wl-round-solved-badge { font-family: var(--font-mono); font-size: 10px; letter-spacing: 1px; color: var(--green); text-transform: uppercase; }
+  .wl-words { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
+  .wl-word { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 8px; text-align: center; font-family: var(--font-word); font-size: 16px; font-weight: 800; letter-spacing: 1px; line-height: 1.05; color: var(--text); text-transform: uppercase; text-shadow: 0 1px 0 rgba(0,0,0,0.12); }
 
-  .wl-round-header {
-    display: flex; align-items: center; justify-content: space-between;
-    margin-bottom: 14px;
-  }
-  .wl-round-num {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    color: var(--text-muted);
-  }
-  .wl-round-solved-badge {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: 1px;
-    color: var(--green);
-    text-transform: uppercase;
-  }
-
-  .wl-words {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
-    margin-bottom: 14px;
-  }
-  .wl-word {
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 12px 8px;
-    text-align: center;
-    font-family: var(--font-word);
-    font-size: 16px;
-    font-weight: 800;
-    letter-spacing: 1px;
-    line-height: 1.05;
-    color: var(--text);
-    text-transform: uppercase;
-    text-shadow: 0 1px 0 rgba(0,0,0,0.12);
-  }
-
-  .wl-answer-entry {
-    display: flex; flex-direction: column; align-items: center; gap: 10px;
-  }
-  .wl-input-row {
-    display: flex; gap: 8px; justify-content: center; align-items: center;
-  }
-  .wl-letter-input {
-    width: 42px; height: 42px;
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    font-family: var(--font-mono);
-    font-size: 18px;
-    color: var(--text);
-    text-transform: uppercase;
-    text-align: center;
-    outline: none;
-    transition: border-color 0.2s, transform 0.1s, background 0.2s, color 0.2s;
-  }
+  .wl-answer-entry { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .wl-input-row { display: flex; gap: 8px; justify-content: center; align-items: center; }
+  .wl-letter-input { width: 42px; height: 42px; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; font-family: var(--font-mono); font-size: 18px; color: var(--text); text-transform: uppercase; text-align: center; outline: none; transition: border-color 0.2s, transform 0.1s, background 0.2s, color 0.2s; }
   .wl-letter-input:focus { border-color: var(--accent); transform: translateY(-1px); }
-  .wl-letter-input.gold {
-    background: color-mix(in srgb, var(--accent) 22%, var(--surface2));
-    border-color: var(--accent);
-    color: var(--accent);
-    font-weight: 600;
-  }
-  .wl-light .wl-letter-input.gold {
-    background: color-mix(in srgb, var(--accent) 18%, var(--surface2));
-    border-color: var(--accent);
-    color: #7a5a00;
-    font-weight: 700;
-  }
+  .wl-letter-input.gold { background: color-mix(in srgb, var(--accent) 22%, var(--surface2)); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .wl-light .wl-letter-input.gold { background: color-mix(in srgb, var(--accent) 18%, var(--surface2)); border-color: var(--accent); color: #7a5a00; font-weight: 700; }
   .wl-letter-input:disabled { opacity: 0.8; cursor: not-allowed; }
 
-  .wl-submit {
-    background: var(--accent);
-    color: var(--bg);
-    border: none;
-    border-radius: 10px;
-    padding: 10px 18px;
-    font-family: var(--font-body);
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    letter-spacing: 0.3px;
-    transition: opacity 0.15s, transform 0.1s;
-    white-space: nowrap;
-  }
+  .wl-submit { background: var(--accent); color: var(--bg); border: none; border-radius: 10px; padding: 10px 18px; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; letter-spacing: 0.3px; transition: opacity 0.15s, transform 0.1s; white-space: nowrap; }
   .wl-submit:hover:not(:disabled) { opacity: 0.88; transform: scale(0.98); }
   .wl-submit:disabled { opacity: 0.3; cursor: not-allowed; }
-
-  .wl-error-msg {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--accent2);
-    margin-top: 8px;
-    letter-spacing: 0.5px;
-    min-height: 16px;
-  }
-
-  .wl-answer-reveal {
-    text-align: center;
-    padding: 10px;
-    font-family: var(--font-display);
-    font-size: 20px;
-    font-weight: 700;
-    letter-spacing: 3px;
-    color: var(--green);
-    text-transform: uppercase;
-  }
+  .wl-error-msg { font-family: var(--font-mono); font-size: 11px; color: var(--accent2); margin-top: 8px; letter-spacing: 0.5px; min-height: 16px; }
+  .wl-answer-reveal { text-align: center; padding: 10px; font-family: var(--font-display); font-size: 20px; font-weight: 700; letter-spacing: 3px; color: var(--green); text-transform: uppercase; }
   .wl-answer-reveal.missed { color: var(--accent2); }
 
   /* MODAL */
-  .wl-overlay {
-    position: fixed; inset: 0;
-    background: rgba(10,9,20,0.82);
-    backdrop-filter: blur(6px);
-    display: flex; align-items: center; justify-content: center;
-    z-index: 100;
-    padding: 20px;
-    animation: fadeIn 0.25s ease;
-  }
+  .wl-overlay { position: fixed; inset: 0; background: rgba(10,9,20,0.82); backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 20px; animation: fadeIn 0.25s ease; }
   .wl-light .wl-overlay { background: rgba(210,206,198,0.82); }
   @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-
-  .wl-modal {
-    position: relative;
-    overflow: hidden;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 20px;
-    padding: 32px 28px;
-    max-width: 420px;
-    width: 100%;
-    animation: slideUp 0.3s cubic-bezier(0.22,1,0.36,1);
-  }
-  .wl-modal.wl-results-modal { max-width: 380px; padding: 24px 20px 18px; }
-  @keyframes slideUp {
-    from { transform: translateY(20px); opacity: 0; }
-    to   { transform: translateY(0);    opacity: 1; }
-  }
+  .wl-modal { position: relative; overflow: hidden; background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 32px 28px; max-width: 420px; width: 100%; animation: slideUp 0.3s cubic-bezier(0.22,1,0.36,1); }
+  .wl-modal.wl-results-modal { max-width: 400px; padding: 24px 20px 18px; }
+  @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
   .wl-win-burst { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
-  .wl-win-spark {
-    position: absolute; top: -14%; font-size: 20px; opacity: 0;
-    animation: fallCelebrate 2.6s ease-out 1 forwards;
-  }
-  @keyframes fallCelebrate {
-    0% { transform: translate3d(0,0,0) rotate(0deg) scale(0.8); opacity: 0; }
-    12% { opacity: 1; }
-    100% { transform: translate3d(var(--drift),520px,0) rotate(520deg) scale(1.15); opacity: 0; }
-  }
+  .wl-win-spark { position: absolute; top: -14%; font-size: 20px; opacity: 0; animation: fallCelebrate 2.6s ease-out 1 forwards; }
+  @keyframes fallCelebrate { 0% { transform: translate3d(0,0,0) rotate(0deg) scale(0.8); opacity: 0; } 12% { opacity: 1; } 100% { transform: translate3d(var(--drift),520px,0) rotate(520deg) scale(1.15); opacity: 0; } }
 
-  .wl-modal-title {
-    font-family: var(--font-display);
-    font-size: 32px;
-    font-weight: 900;
-    margin-bottom: 6px;
-    line-height: 1.1;
-    color: var(--text);
-  }
+  .wl-modal-title { font-family: var(--font-display); font-size: 32px; font-weight: 900; margin-bottom: 6px; line-height: 1.1; color: var(--text); }
   .wl-modal-sub { font-size: 14px; color: var(--text-muted); margin-bottom: 24px; }
   .wl-results-modal .wl-modal-title { font-size: 28px; text-align: center; margin-bottom: 4px; }
   .wl-results-modal .wl-modal-sub { text-align: center; margin-bottom: 16px; line-height: 1.45; }
 
   /* HOW TO PLAY */
-  .wl-howto-example {
-    background: var(--surface2);
-    border-radius: 10px;
-    padding: 14px;
-    margin-bottom: 18px;
-  }
+  .wl-howto-example { background: var(--surface2); border-radius: 10px; padding: 14px; margin-bottom: 18px; }
   .wl-howto-example p { font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
   .wl-howto-example .ex-words { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
-  .wl-howto-example .ex-word {
-    background: var(--border);
-    border-radius: 6px;
-    padding: 4px 10px;
-    font-family: var(--font-display);
-    font-size: 13px;
-    font-weight: 700;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    color: var(--text);
-  }
+  .wl-howto-example .ex-word { background: var(--border); border-radius: 6px; padding: 4px 10px; font-family: var(--font-display); font-size: 13px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--text); }
   .wl-howto-example .ex-answer { font-family: var(--font-mono); font-size: 13px; color: var(--accent); }
-
   .wl-rules { display: flex; flex-direction: column; gap: 8px; margin-bottom: 24px; }
   .wl-rule { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-muted); }
-  .wl-rule-icon {
-    width: 28px; height: 28px;
-    background: var(--surface2);
-    border-radius: 8px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 14px;
-    flex-shrink: 0;
-  }
+  .wl-rule-icon { width: 28px; height: 28px; background: var(--surface2); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
 
   /* RESULTS */
   .wl-result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
   .wl-result-cell { background: var(--surface2); border-radius: 10px; padding: 11px 10px; text-align: center; }
   .wl-result-val { font-family: var(--font-mono); font-size: 22px; font-weight: 500; color: var(--text); margin-bottom: 2px; }
   .wl-result-label { font-family: var(--font-mono); font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-muted); }
-
   .wl-answer-list { background: var(--surface2); border-radius: 10px; padding: 10px 12px; margin-bottom: 14px; }
   .wl-answer-list-title { font-family: var(--font-mono); font-size: 9px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px; }
-  .wl-answer-row {
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    text-align: center; gap: 3px; padding: 5px 0;
-    border-bottom: 1px solid var(--border); font-size: 13px;
-  }
+  .wl-answer-row { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 3px; padding: 5px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
   .wl-answer-row:last-child { border-bottom: none; }
   .wl-answer-row-words { color: var(--text-muted); font-size: 12px; }
   .wl-results-modal .wl-answer-row-words { font-family: var(--font-word); font-weight: 700; letter-spacing: 0.3px; }
@@ -582,57 +315,29 @@ const css = `
   .wl-answer-row-ans.correct { color: var(--green); }
   .wl-answer-row-ans.missed  { color: var(--accent2); }
 
-  /* BUTTONS */
-  .wl-btn {
-    width: 100%; padding: 12px; border-radius: 12px; border: none;
-    font-family: var(--font-body); font-size: 15px; font-weight: 600;
-    cursor: pointer; transition: opacity 0.15s, transform 0.1s; letter-spacing: 0.2px;
+  /* COUNTDOWN BANNER */
+  .wl-countdown-banner {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 16px;
+    margin-bottom: 12px;
+    text-align: center;
   }
+  .wl-countdown-label { font-family: var(--font-mono); font-size: 9px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
+  .wl-countdown-value { font-family: var(--font-mono); font-size: 26px; font-weight: 500; color: var(--accent); letter-spacing: 2px; }
+
+  /* BUTTONS */
+  .wl-btn { width: 100%; padding: 12px; border-radius: 12px; border: none; font-family: var(--font-body); font-size: 15px; font-weight: 600; cursor: pointer; transition: opacity 0.15s, transform 0.1s; letter-spacing: 0.2px; }
   .wl-btn:hover { opacity: 0.88; transform: scale(0.99); }
   .wl-btn-primary { background: var(--accent); color: var(--bg); }
-  .wl-btn-ghost {
-    background: transparent; color: var(--text-muted);
-    border: 1px solid var(--border); margin-top: 8px; font-size: 13px;
-  }
+  .wl-btn-ghost { background: transparent; color: var(--text-muted); border: 1px solid var(--border); margin-top: 8px; font-size: 13px; }
   .wl-results-modal .wl-btn-ghost { margin-top: 6px; }
-
-  /* ARCHIVE */
-  .wl-archive-modal { max-width: 420px; }
-  .wl-archive-list { display: flex; flex-direction: column; gap: 8px; margin: 20px 0; max-height: 320px; overflow-y: auto; }
-  .wl-archive-date-btn {
-    width: 100%; text-align: left;
-    border: 1px solid var(--border); background: var(--surface2); color: var(--text);
-    border-radius: 10px; padding: 10px 14px;
-    font-family: var(--font-mono); font-size: 13px; cursor: pointer;
-    transition: border-color 0.2s, color 0.2s;
-    display: flex; align-items: center; justify-content: space-between;
-  }
-  .wl-archive-date-btn:hover { border-color: var(--accent); color: var(--accent); }
-  .wl-archive-date-btn.today { border-color: var(--accent); }
-  .wl-archive-date-btn.completed {
-    border-color: var(--green);
-    background: color-mix(in srgb, var(--green) 8%, var(--surface2));
-  }
-  .wl-light .wl-archive-date-btn.completed {
-    border-color: var(--green);
-    background: color-mix(in srgb, var(--green) 14%, var(--surface2));
-    color: #0f5c34;
-  }
-  .wl-archive-date-btn.completed:hover { border-color: var(--green); color: var(--green); }
-  .wl-light .wl-archive-date-btn.completed:hover { color: #0f5c34; }
-  .wl-archive-date-tag { font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--accent); }
-  .wl-archive-completed-tag { font-size: 12px; color: var(--green); display: flex; align-items: center; gap: 3px; }
-  .wl-light .wl-archive-completed-tag { color: #0f5c34; }
-  .wl-archive-empty { margin: 18px 0; text-align: center; color: var(--text-muted); font-family: var(--font-body); font-size: 14px; }
   .wl-result-nav-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
 
   /* SETTINGS */
-  .wl-stats-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
-  .wl-settings-row {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 16px 0;
-    border-bottom: 1px solid var(--border);
-  }
+  .wl-modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+  .wl-settings-row { display: flex; align-items: center; justify-content: space-between; padding: 16px 0; border-bottom: 1px solid var(--border); }
   .wl-settings-row:last-of-type { border-bottom: none; }
   .wl-settings-label { display: flex; flex-direction: column; gap: 4px; }
   .wl-settings-label-title { font-family: var(--font-body); font-size: 14px; font-weight: 600; color: var(--text); }
@@ -641,55 +346,67 @@ const css = `
   /* TOGGLE */
   .wl-toggle { position: relative; width: 46px; height: 26px; flex-shrink: 0; cursor: pointer; }
   .wl-toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
-  .wl-toggle-track {
-    position: absolute; inset: 0;
-    border-radius: 13px;
-    background: var(--border);
-    transition: background 0.25s;
-    cursor: pointer;
-  }
+  .wl-toggle-track { position: absolute; inset: 0; border-radius: 13px; background: var(--border); transition: background 0.25s; cursor: pointer; }
   .wl-toggle input:checked + .wl-toggle-track { background: var(--accent); }
-  .wl-toggle-thumb {
-    position: absolute;
-    top: 3px; left: 3px;
-    width: 20px; height: 20px;
-    border-radius: 50%;
-    background: #fff;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.25);
-    transition: transform 0.22s cubic-bezier(0.34,1.56,0.64,1);
-    pointer-events: none;
-  }
+  .wl-toggle-thumb { position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.25); transition: transform 0.22s cubic-bezier(0.34,1.56,0.64,1); pointer-events: none; }
   .wl-toggle input:checked ~ .wl-toggle-thumb { transform: translateX(20px); }
 
+  /* CALENDAR ARCHIVE */
+  .wl-cal-modal { max-width: 520px; max-height: 88vh; overflow-y: auto; padding: 24px 20px; }
+  .wl-cal-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .wl-cal-month-title { font-family: var(--font-display); font-size: 20px; font-weight: 900; color: var(--text); }
+  .wl-cal-nav-btn {
+    width: 34px; height: 34px; border-radius: 50%;
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text-muted); cursor: pointer; font-size: 16px;
+    display: flex; align-items: center; justify-content: center;
+    transition: border-color 0.2s, color 0.2s;
+  }
+  .wl-cal-nav-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  .wl-cal-nav-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  .wl-cal-day-headers { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 6px; }
+  .wl-cal-day-header { text-align: center; font-family: var(--font-mono); font-size: 10px; letter-spacing: 1px; color: var(--text-muted); padding: 4px 0; text-transform: uppercase; }
+  .wl-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+  .wl-cal-cell {
+    aspect-ratio: 1;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    cursor: pointer; position: relative;
+    transition: border-color 0.15s, background 0.15s, transform 0.1s;
+    min-height: 52px;
+    padding: 4px;
+    overflow: hidden;
+  }
+  .wl-cal-cell:hover { border-color: var(--accent); transform: scale(1.04); }
+  .wl-cal-cell.empty { background: transparent; border-color: transparent; cursor: default; pointer-events: none; }
+  .wl-cal-cell.future { opacity: 0.3; cursor: not-allowed; pointer-events: none; }
+  .wl-cal-cell.today { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface2)); }
+  .wl-cal-cell.completed { border-color: var(--green); background: color-mix(in srgb, var(--green) 10%, var(--surface2)); }
+  .wl-light .wl-cal-cell.completed { background: color-mix(in srgb, var(--green) 16%, var(--surface2)); }
+  .wl-cal-cell.today:hover { border-color: var(--accent); }
+  .wl-cal-cell-day { font-family: var(--font-mono); font-size: 9px; color: var(--text-muted); position: absolute; top: 5px; right: 6px; }
+  .wl-cal-cell-num { font-family: var(--font-mono); font-size: 11px; font-weight: 500; color: var(--accent); letter-spacing: 0.5px; }
+  .wl-cal-cell.completed .wl-cal-cell-num { color: var(--green); }
+  .wl-light .wl-cal-cell.completed .wl-cal-cell-num { color: #0f5c34; }
+  .wl-cal-cell-check { font-size: 11px; color: var(--green); margin-top: 1px; }
+  .wl-light .wl-cal-cell-check { color: #0f5c34; }
+  .wl-cal-cell-today-label { font-family: var(--font-mono); font-size: 8px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 1px; }
+  .wl-cal-no-puzzles { text-align: center; padding: 32px 0; color: var(--text-muted); font-family: var(--font-body); font-size: 14px; }
+
   /* TOAST */
-  .wl-toast {
-    position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%);
-    background: var(--green); color: var(--bg);
-    font-family: var(--font-mono); font-size: 13px; font-weight: 500;
-    letter-spacing: 0.5px; padding: 12px 24px; border-radius: 40px;
-    z-index: 200; animation: toastIn 0.25s cubic-bezier(0.34,1.56,0.64,1); white-space: nowrap;
-  }
-  @keyframes toastIn {
-    from { transform: translateX(-50%) translateY(16px); opacity: 0; }
-    to   { transform: translateX(-50%) translateY(0);    opacity: 1; }
-  }
+  .wl-toast { position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%); background: var(--green); color: var(--bg); font-family: var(--font-mono); font-size: 13px; font-weight: 500; letter-spacing: 0.5px; padding: 12px 24px; border-radius: 40px; z-index: 200; animation: toastIn 0.25s cubic-bezier(0.34,1.56,0.64,1); white-space: nowrap; }
+  @keyframes toastIn { from { transform: translateX(-50%) translateY(16px); opacity: 0; } to { transform: translateX(-50%) translateY(0); opacity: 1; } }
 
   /* LOADING */
-  .wl-loading {
-    min-height: 100vh; display: flex; flex-direction: column;
-    align-items: center; justify-content: center; gap: 12px;
-    background: var(--bg); font-family: var(--font-mono);
-    color: var(--text-muted); font-size: 12px; letter-spacing: 2px; text-transform: uppercase;
-  }
-  .wl-spinner {
-    width: 28px; height: 28px;
-    border: 2px solid var(--border); border-top-color: var(--accent);
-    border-radius: 50%; animation: spin 0.7s linear infinite;
-  }
+  .wl-loading { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background: var(--bg); font-family: var(--font-mono); color: var(--text-muted); font-size: 12px; letter-spacing: 2px; text-transform: uppercase; }
+  .wl-spinner { width: 28px; height: 28px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
 `;
 
-// ─── TOGGLE COMPONENT ─────────────────────────────────────────────────────────
+// ─── TOGGLE ───────────────────────────────────────────────────────────────────
 const Toggle = ({ checked, onChange }) => (
   <label className="wl-toggle">
     <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} />
@@ -698,19 +415,68 @@ const Toggle = ({ checked, onChange }) => (
   </label>
 );
 
+// ─── CLOSE BUTTON ─────────────────────────────────────────────────────────────
+const CloseBtn = ({ onClick }) => (
+  <button onClick={onClick} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 22, lineHeight: 1 }} aria-label="Close">×</button>
+);
+
+// ─── COUNTDOWN HOOK ───────────────────────────────────────────────────────────
+const useCountdown = (active) => {
+  const [secs, setSecs] = useState(() => secondsUntilMidnightEST());
+  useEffect(() => {
+    if (!active) return;
+    setSecs(secondsUntilMidnightEST());
+    const id = setInterval(() => setSecs(secondsUntilMidnightEST()), 1000);
+    return () => clearInterval(id);
+  }, [active]);
+  return secs;
+};
+
+// ─── NAV DRAWER ───────────────────────────────────────────────────────────────
+const NavDrawer = ({ onClose, onHelp, onSettings, onArchive, onHome, showArchive }) => (
+  <>
+    <div className="wl-nav-backdrop" onClick={onClose} />
+    <nav className="wl-nav-drawer" role="dialog" aria-label="Navigation menu">
+      <div className="wl-nav-header">
+        <div className="wl-nav-title">Word<span style={{ color: "var(--accent)" }}>Fuse</span></div>
+        <button className="wl-nav-close" onClick={onClose} aria-label="Close menu">×</button>
+      </div>
+
+      <button className="wl-nav-item" onClick={() => { onHome(); onClose(); }}>
+        <div className="wl-nav-item-icon">🏠</div>
+        Daily Puzzle
+      </button>
+
+      <button className="wl-nav-item" onClick={() => { onHelp(); onClose(); }}>
+        <div className="wl-nav-item-icon">❓</div>
+        How to Play
+      </button>
+
+      {showArchive && (
+        <button className="wl-nav-item" onClick={() => { onArchive(); onClose(); }}>
+          <div className="wl-nav-item-icon">📅</div>
+          Play Archive
+        </button>
+      )}
+
+      <div className="wl-nav-divider" />
+
+      <button className="wl-nav-item" onClick={() => { onSettings(); onClose(); }}>
+        <div className="wl-nav-item-icon">⚙️</div>
+        Settings
+      </button>
+    </nav>
+  </>
+);
+
 // ─── SETTINGS MODAL ───────────────────────────────────────────────────────────
 const SettingsModal = ({ lightMode, timerEnabled, onToggleLight, onToggleTimer, onClose }) => (
   <div className="wl-overlay" onClick={onClose}>
     <div className="wl-modal" style={{ maxWidth: 380 }} onClick={e => e.stopPropagation()}>
-      <div className="wl-stats-header">
+      <div className="wl-modal-header">
         <div className="wl-modal-title" style={{ fontSize: 24 }}>Settings</div>
-        <button
-          onClick={onClose}
-          style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 22 }}
-          aria-label="Close"
-        >×</button>
+        <CloseBtn onClick={onClose} />
       </div>
-
       <div className="wl-settings-row">
         <div className="wl-settings-label">
           <div className="wl-settings-label-title">🌙 Dark Mode</div>
@@ -718,127 +484,205 @@ const SettingsModal = ({ lightMode, timerEnabled, onToggleLight, onToggleTimer, 
         </div>
         <Toggle checked={!lightMode} onChange={val => onToggleLight(!val)} />
       </div>
-
       <div className="wl-settings-row">
         <div className="wl-settings-label">
           <div className="wl-settings-label-title">⏱ Timer</div>
-          <div className="wl-settings-label-sub">
-            {timerEnabled ? "3-minute countdown is active" : "Play at your own pace"}
-          </div>
+          <div className="wl-settings-label-sub">{timerEnabled ? "3-minute countdown is active" : "Play at your own pace"}</div>
         </div>
         <Toggle checked={timerEnabled} onChange={onToggleTimer} />
       </div>
-
       <button className="wl-btn wl-btn-ghost" style={{ marginTop: 20 }} onClick={onClose}>Done</button>
     </div>
   </div>
 );
 
 // ─── RESULTS MODAL ────────────────────────────────────────────────────────────
-const ResultsModal = ({
-  gameStatus, timeLeft, wrongGuesses, completed, stats, puzzle,
-  timerEnabled, onShareResults, onViewStats, onGoHome, onViewArchived,
-}) => (
-  <div className="wl-overlay">
-    <div className="wl-modal wl-results-modal">
-      {gameStatus === "won" && (
-        <div className="wl-win-burst" aria-hidden="true">
-          {WIN_SPARKS.map((spark, idx) => (
-            <span key={`${spark}-${idx}`} className="wl-win-spark" style={{
-              left: `${8 + idx * 12}%`,
-              animationDelay: `${idx * 0.15}s`,
-              "--drift": `${(idx % 2 === 0 ? 1 : -1) * (18 + idx * 2)}px`,
-            }}>{spark}</span>
+const ResultsModal = ({ gameStatus, timeLeft, wrongGuesses, completed, stats, puzzle, timerEnabled, isToday, onShareResults, onViewStats, onGoHome, onViewArchived }) => {
+  const countdownSecs = useCountdown(isToday);
+
+  return (
+    <div className="wl-overlay">
+      <div className="wl-modal wl-results-modal">
+        {gameStatus === "won" && (
+          <div className="wl-win-burst" aria-hidden="true">
+            {WIN_SPARKS.map((spark, idx) => (
+              <span key={`${spark}-${idx}`} className="wl-win-spark" style={{ left: `${8 + idx * 12}%`, animationDelay: `${idx * 0.15}s`, "--drift": `${(idx % 2 === 0 ? 1 : -1) * (18 + idx * 2)}px` }}>{spark}</span>
+            ))}
+          </div>
+        )}
+        <div className="wl-modal-title" style={{ color: gameStatus === "won" ? "var(--green)" : "var(--accent2)" }}>
+          {gameStatus === "won" ? "You got it!" : "Game Over"}
+        </div>
+        <div className="wl-modal-sub">
+          {gameStatus === "won"
+            ? `Solved${timerEnabled ? ` in ${formatTime(TOTAL_TIME - timeLeft)}` : ""} with ${wrongGuesses} wrong guess${wrongGuesses !== 1 ? "es" : ""}`
+            : "Better luck tomorrow!"}
+        </div>
+
+        <div className="wl-result-grid">
+          {timerEnabled && (
+            <div className="wl-result-cell">
+              <div className="wl-result-val">{formatTime(TOTAL_TIME - timeLeft)}</div>
+              <div className="wl-result-label">Time Taken</div>
+            </div>
+          )}
+          <div className="wl-result-cell">
+            <div className="wl-result-val">{wrongGuesses}/{MAX_WRONG}</div>
+            <div className="wl-result-label">Wrong Guesses</div>
+          </div>
+          <div className="wl-result-cell">
+            <div className="wl-result-val">{completed.filter(Boolean).length}/4</div>
+            <div className="wl-result-label">Rounds Solved</div>
+          </div>
+          {stats && (
+            <div className="wl-result-cell">
+              <div className="wl-result-val">{stats.current_streak}{stats.current_streak > 1 ? " 🔥" : ""}</div>
+              <div className="wl-result-label">Win Streak</div>
+            </div>
+          )}
+        </div>
+
+        <div className="wl-answer-list">
+          <div className="wl-answer-list-title">Answers</div>
+          {puzzle.rounds.map((round, i) => (
+            <div key={i} className="wl-answer-row">
+              <span className="wl-answer-row-words">{round.words.join(" · ")}</span>
+              <span className={`wl-answer-row-ans ${completed[i] ? "correct" : "missed"}`}>
+                {completed[i] ? "✓ " : "✗ "}{round.answer.toUpperCase()}
+              </span>
+            </div>
           ))}
         </div>
-      )}
-      <div className="wl-modal-title" style={{ color: gameStatus === "won" ? "var(--green)" : "var(--accent2)" }}>
-        {gameStatus === "won" ? "You got it!" : "Game Over"}
-      </div>
-      <div className="wl-modal-sub">
-        {gameStatus === "won"
-          ? `Solved${timerEnabled ? ` in ${formatTime(TOTAL_TIME - timeLeft)}` : ""} with ${wrongGuesses} wrong guess${wrongGuesses !== 1 ? "es" : ""}`
-          : "Better luck tomorrow!"}
-      </div>
-      <div className="wl-result-grid">
-        {timerEnabled && (
-          <div className="wl-result-cell">
-            <div className="wl-result-val">{formatTime(TOTAL_TIME - timeLeft)}</div>
-            <div className="wl-result-label">Time Taken</div>
-          </div>
-        )}
-        <div className="wl-result-cell">
-          <div className="wl-result-val">{wrongGuesses}/{MAX_WRONG}</div>
-          <div className="wl-result-label">Wrong Guesses</div>
-        </div>
-        <div className="wl-result-cell">
-          <div className="wl-result-val">{completed.filter(Boolean).length}/4</div>
-          <div className="wl-result-label">Rounds Solved</div>
-        </div>
-        {stats && (
-          <div className="wl-result-cell">
-            <div className="wl-result-val">{stats.current_streak}{stats.current_streak > 1 ? " 🔥" : ""}</div>
-            <div className="wl-result-label">Win Streak</div>
-          </div>
-        )}
-      </div>
-      <div className="wl-answer-list">
-        <div className="wl-answer-list-title">Answers</div>
-        {puzzle.rounds.map((round, i) => (
-          <div key={i} className="wl-answer-row">
-            <span className="wl-answer-row-words">{round.words.join(" · ")}</span>
-            <span className={`wl-answer-row-ans ${completed[i] ? "correct" : "missed"}`}>
-              {completed[i] ? "✓ " : "✗ "}{round.answer.toUpperCase()}
-            </span>
-          </div>
-        ))}
-      </div>
-      <button className="wl-btn wl-btn-primary" onClick={onShareResults}>Share Results</button>
-      {stats && <button className="wl-btn wl-btn-ghost" onClick={onViewStats}>View Stats</button>}
-      <div className="wl-result-nav-actions">
-        <button className="wl-btn wl-btn-ghost" onClick={onGoHome} aria-label="Go home">🏠</button>
-        <button className="wl-btn wl-btn-ghost" onClick={onViewArchived} aria-label="Browse past puzzles">📅</button>
-      </div>
-    </div>
-  </div>
-);
 
-// ─── ARCHIVE MODAL ────────────────────────────────────────────────────────────
-const ArchiveDatesModal = ({ archivedDates, loadingArchiveDates, today, completedDates, onSelectDate, onClose }) => (
-  <div className="wl-overlay" onClick={onClose}>
-    <div className="wl-modal wl-archive-modal" onClick={e => e.stopPropagation()}>
-      <div className="wl-stats-header">
-        <div className="wl-modal-title" style={{ fontSize: 24 }}>Past Puzzles</div>
-        <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 22 }} aria-label="Close">×</button>
-      </div>
-      <div className="wl-modal-sub" style={{ marginTop: -8, marginBottom: 0 }}>Choose any date to play that puzzle.</div>
-      {loadingArchiveDates ? (
-        <div className="wl-archive-empty">Loading puzzles…</div>
-      ) : archivedDates.length === 0 ? (
-        <div className="wl-archive-empty">No past puzzles found.</div>
-      ) : (
-        <div className="wl-archive-list">
-          {archivedDates.map(date => {
-            const isCompleted = completedDates.has(date);
-            return (
-              <button
-                key={date}
-                className={`wl-archive-date-btn ${date === today ? "today" : ""} ${isCompleted ? "completed" : ""}`}
-                onClick={() => onSelectDate(date)}
-              >
-                <span>{date}</span>
-                <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                  {isCompleted && <span className="wl-archive-completed-tag" title="Completed">✓</span>}
-                  {date === today && <span className="wl-archive-date-tag">Today</span>}
-                </span>
-              </button>
-            );
-          })}
+        {isToday && (
+          <div className="wl-countdown-banner">
+            <div className="wl-countdown-label">Next puzzle in</div>
+            <div className="wl-countdown-value">{formatCountdown(countdownSecs)}</div>
+          </div>
+        )}
+
+        <button className="wl-btn wl-btn-primary" onClick={onShareResults}>Share Results</button>
+        {stats && <button className="wl-btn wl-btn-ghost" onClick={onViewStats}>View Stats</button>}
+        <div className="wl-result-nav-actions">
+          <button className="wl-btn wl-btn-ghost" onClick={onGoHome} aria-label="Go home">🏠 Home</button>
+          <button className="wl-btn wl-btn-ghost" onClick={onViewArchived} aria-label="Browse past puzzles">📅 Archive</button>
         </div>
-      )}
+      </div>
     </div>
-  </div>
-);
+  );
+};
+
+// ─── CALENDAR ARCHIVE ─────────────────────────────────────────────────────────
+const CalendarArchive = ({ archivedDates, loadingArchiveDates, today, completedDates, onSelectDate, onClose }) => {
+  // Build a map of date → puzzle number (sorted ascending = #1 is earliest)
+  const sortedDates = [...archivedDates].sort((a, b) => a < b ? -1 : 1);
+  const puzzleNumbers = Object.fromEntries(sortedDates.map((d, i) => [d, i + 1]));
+
+  const todayYM = today.slice(0, 7); // "YYYY-MM"
+  const [viewYM, setViewYM] = useState(() => {
+    // Default to this month, but if today has no puzzles show the last month with puzzles
+    return todayYM;
+  });
+
+  const [viewYear, viewMonthIdx] = viewYM.split("-").map(Number);
+  // viewMonthIdx is 1-indexed
+
+  const firstDayOfMonth = new Date(viewYear, viewMonthIdx - 1, 1);
+  const daysInMonth = new Date(viewYear, viewMonthIdx, 0).getDate();
+  const startDow = firstDayOfMonth.getDay(); // 0=Sun
+
+  // All dates in this month that have puzzles
+  const monthPrefix = viewYM;
+  const monthDates = new Set(archivedDates.filter(d => d.startsWith(monthPrefix)));
+
+  const prevYM = (() => {
+    const d = new Date(viewYear, viewMonthIdx - 2, 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  })();
+  const nextYM = (() => {
+    const d = new Date(viewYear, viewMonthIdx, 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  })();
+
+  const hasPrev = archivedDates.some(d => d.startsWith(prevYM));
+  const hasNext = nextYM <= todayYM;
+
+  const cells = [];
+  for (let i = 0; i < startDow; i++) cells.push({ empty: true, key: `e-${i}` });
+  for (let d = 1; d <= daysInMonth; d++) {
+    const iso = `${viewYM}-${String(d).padStart(2, "0")}`;
+    cells.push({ day: d, iso });
+  }
+
+  return (
+    <div className="wl-overlay" onClick={onClose}>
+      <div className="wl-modal wl-cal-modal" onClick={e => e.stopPropagation()}>
+        <div className="wl-modal-header" style={{ marginBottom: 16 }}>
+          <div className="wl-modal-title" style={{ fontSize: 22 }}>Archive</div>
+          <CloseBtn onClick={onClose} />
+        </div>
+
+        {loadingArchiveDates ? (
+          <div className="wl-cal-no-puzzles">Loading puzzles…</div>
+        ) : (
+          <>
+            <div className="wl-cal-nav">
+              <button className="wl-cal-nav-btn" onClick={() => setViewYM(prevYM)} disabled={!hasPrev} aria-label="Previous month">‹</button>
+              <div className="wl-cal-month-title">{MONTH_NAMES[viewMonthIdx - 1]} {viewYear}</div>
+              <button className="wl-cal-nav-btn" onClick={() => setViewYM(nextYM)} disabled={!hasNext} aria-label="Next month">›</button>
+            </div>
+
+            <div className="wl-cal-day-headers">
+              {DAY_LABELS.map((l, i) => <div key={i} className="wl-cal-day-header">{l}</div>)}
+            </div>
+
+            <div className="wl-cal-grid">
+              {cells.map(cell => {
+                if (cell.empty) return <div key={cell.key} className="wl-cal-cell empty" />;
+                const { day, iso } = cell;
+                const hasPuzzle = monthDates.has(iso);
+                const isFuture = iso > today;
+                const isToday = iso === today;
+                const isDone = completedDates.has(iso);
+                const pNum = puzzleNumbers[iso];
+
+                if (!hasPuzzle || isFuture) {
+                  return (
+                    <div key={iso} className={`wl-cal-cell ${isFuture ? "future" : "empty"}`} style={{ opacity: isFuture ? 0.2 : 0.22, cursor: "default", pointerEvents: "none" }}>
+                      <div className="wl-cal-cell-day">{day}</div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <button
+                    key={iso}
+                    className={`wl-cal-cell ${isToday ? "today" : ""} ${isDone ? "completed" : ""}`}
+                    onClick={() => onSelectDate(iso)}
+                    aria-label={`Puzzle #${pNum} — ${iso}`}
+                  >
+                    <div className="wl-cal-cell-day">{day}</div>
+                    <div className="wl-cal-cell-num">#{pNum}</div>
+                    {isDone
+                      ? <div className="wl-cal-cell-check">✓</div>
+                      : isToday
+                        ? <div className="wl-cal-cell-today-label">Today</div>
+                        : null
+                    }
+                  </button>
+                );
+              })}
+            </div>
+
+            {!monthDates.size && (
+              <div className="wl-cal-no-puzzles">No puzzles this month.</div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export default function WordLinkGame() {
@@ -846,8 +690,8 @@ export default function WordLinkGame() {
     const savedVersion = localStorage.getItem("wl_cache_version");
     if (savedVersion === APP_CACHE_VERSION) return;
     Object.keys(localStorage)
-      .filter(key => key.startsWith("wl_") && key !== "wl_seen_help" && key !== "wl_user_id")
-      .forEach(key => localStorage.removeItem(key));
+      .filter(k => k.startsWith("wl_") && k !== "wl_seen_help" && k !== "wl_user_id")
+      .forEach(k => localStorage.removeItem(k));
     localStorage.setItem("wl_cache_version", APP_CACHE_VERSION);
   }, []);
 
@@ -855,18 +699,11 @@ export default function WordLinkGame() {
 
   const today = getTodayEST();
 
-  // ── Persisted settings ──
   const [lightMode, setLightMode] = useState(() => localStorage.getItem("wl_light_mode") !== "false");
   const [timerEnabled, setTimerEnabled] = useState(() => localStorage.getItem("wl_timer_enabled") !== "false");
 
-  const toggleLightMode = useCallback(val => {
-    setLightMode(val);
-    localStorage.setItem("wl_light_mode", String(val));
-  }, []);
-  const toggleTimerEnabled = useCallback(val => {
-    setTimerEnabled(val);
-    localStorage.setItem("wl_timer_enabled", String(val));
-  }, []);
+  const toggleLightMode = useCallback(val => { setLightMode(val); localStorage.setItem("wl_light_mode", String(val)); }, []);
+  const toggleTimerEnabled = useCallback(val => { setTimerEnabled(val); localStorage.setItem("wl_timer_enabled", String(val)); }, []);
 
   const [puzzle, setPuzzle] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -890,6 +727,7 @@ export default function WordLinkGame() {
   const [showCopied, setShowCopied] = useState(false);
   const [showArchiveModal, setShowArchiveModal] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [archivedDates, setArchivedDates] = useState([]);
   const [loadingArchiveDates, setLoadingArchiveDates] = useState(false);
@@ -908,6 +746,7 @@ export default function WordLinkGame() {
   useEffect(() => {
     const handler = e => {
       if (e.key !== "Escape") return;
+      if (showMenu) { setShowMenu(false); return; }
       if (showLeaveConfirm) { setShowLeaveConfirm(false); return; }
       if (showSettings) { setShowSettings(false); return; }
       if (showArchiveModal) { setShowArchiveModal(false); return; }
@@ -917,7 +756,7 @@ export default function WordLinkGame() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [showLeaveConfirm, showSettings, showArchiveModal, showHelp, showCopied, screen]);
+  }, [showMenu, showLeaveConfirm, showSettings, showArchiveModal, showHelp, showCopied, screen]);
 
   const resetBoard = () => {
     setGuesses(["", "", "", ""]);
@@ -934,23 +773,18 @@ export default function WordLinkGame() {
     roundRefs.current = [];
   };
 
-  const focusLetter = useCallback((roundIdx, letterIdx) => {
-    letterInputRefs.current[roundIdx]?.[letterIdx]?.focus();
+  const focusLetter = useCallback((ri, li) => {
+    letterInputRefs.current[ri]?.[li]?.focus();
   }, []);
 
   const openArchiveModal = useCallback(async () => {
     setShowArchiveModal(true);
     setLoadingArchiveDates(true);
     try {
-      const { data: puzzleDates } = await supabase
-        .from("puzzles").select("puzzle_date")
-        .lte("puzzle_date", today).order("puzzle_date", { ascending: false });
+      const { data: puzzleDates } = await supabase.from("puzzles").select("puzzle_date").lte("puzzle_date", today).order("puzzle_date", { ascending: false });
       setArchivedDates((puzzleDates || []).map(r => r.puzzle_date).filter(Boolean));
-
       const uid = getUserId();
-      const { data: results } = await supabase
-        .from("game_results").select("puzzle_date")
-        .eq("user_id", uid).eq("completed", true);
+      const { data: results } = await supabase.from("game_results").select("puzzle_date").eq("user_id", uid).eq("completed", true);
       setCompletedDates(new Set((results || []).map(r => r.puzzle_date).filter(Boolean)));
     } catch (_) {
       setArchivedDates([]);
@@ -960,7 +794,6 @@ export default function WordLinkGame() {
     }
   }, [today]);
 
-  // ── Load puzzle ──
   useEffect(() => {
     (async () => {
       setLoading(true);
@@ -1010,9 +843,9 @@ export default function WordLinkGame() {
 
   useEffect(() => {
     if (screen !== "game" || gameStatus !== "playing") return;
-    const firstUnsolved = completed.findIndex(d => !d);
-    if (firstUnsolved === -1) return;
-    if (completed[activeRoundIdx]) setActiveRoundIdx(firstUnsolved);
+    const first = completed.findIndex(d => !d);
+    if (first === -1) return;
+    if (completed[activeRoundIdx]) setActiveRoundIdx(first);
   }, [activeRoundIdx, completed, gameStatus, screen]);
 
   useEffect(() => {
@@ -1035,7 +868,6 @@ export default function WordLinkGame() {
     }
   };
 
-  // ── Timer — only when timerEnabled ──
   useEffect(() => {
     if (screen !== "game" || gameStatus !== "playing" || !timerEnabled) return;
     timerRef.current = setInterval(() => {
@@ -1047,7 +879,6 @@ export default function WordLinkGame() {
     return () => clearInterval(timerRef.current);
   }, [screen, gameStatus, timerEnabled]);
 
-  // ── End game ──
   const triggerEndGame = useCallback(async (status, overrides = {}) => {
     if (gameStatusRef.current !== "playing") return;
     setGameStatus(status);
@@ -1091,7 +922,6 @@ export default function WordLinkGame() {
     } catch (_) {}
   }, [timeLeft, wrongGuesses, puzzle, activeDate, today, completed, hintLetters, timerEnabled]);
 
-  // ── Submit guess ──
   const submitGuess = useCallback(roundIdx => {
     if (gameStatus !== "playing" || completed[roundIdx] || !guesses[roundIdx].trim()) return;
     const guess = guesses[roundIdx].trim().toLowerCase();
@@ -1101,7 +931,6 @@ export default function WordLinkGame() {
       setErrorMsgs(e => e.map((m, i) => i === roundIdx ? `Enter all ${answer.length} letters` : m));
       return;
     }
-
     if (guess === answer) {
       const newCompleted = completed.map((c, i) => i === roundIdx ? true : c);
       setCompleted(newCompleted);
@@ -1116,20 +945,18 @@ export default function WordLinkGame() {
       const newWPR = wrongPerRound.map((w, i) => i === roundIdx ? w + 1 : w);
       setWrongPerRound(newWPR);
       const totalNext = wrongGuesses + 1;
-      const lettersRevealed = newWPR[roundIdx];
-      const hintChar = answer[lettersRevealed - 1] ?? null;
+      const revealed = newWPR[roundIdx];
       const isLosing = totalNext >= MAX_WRONG;
-
+      const hintChar = answer[revealed - 1] ?? null;
       if (hintChar && !isLosing) {
-        const revealed = answer.slice(0, lettersRevealed);
-        setHintLetters(h => h.map((l, i) => i === roundIdx ? revealed.toUpperCase() : l));
-        setGuesses(g => g.map((v, i) => i === roundIdx ? revealed : v));
-        setErrorMsgs(e => e.map((m, i) => i === roundIdx ? `Hint: starts with "${revealed.toUpperCase()}"` : m));
-        setTimeout(() => focusLetter(roundIdx, Math.min(revealed.length, answer.length - 1)), 10);
+        const rev = answer.slice(0, revealed);
+        setHintLetters(h => h.map((l, i) => i === roundIdx ? rev.toUpperCase() : l));
+        setGuesses(g => g.map((v, i) => i === roundIdx ? rev : v));
+        setErrorMsgs(e => e.map((m, i) => i === roundIdx ? `Hint: starts with "${rev.toUpperCase()}"` : m));
+        setTimeout(() => focusLetter(roundIdx, Math.min(rev.length, answer.length - 1)), 10);
       } else if (!isLosing) {
         setErrorMsgs(e => e.map((m, i) => i === roundIdx ? "Not quite — try again" : m));
       }
-
       setWrongGuesses(prev => {
         const next = prev + 1;
         if (next >= MAX_WRONG) triggerEndGame("lost");
@@ -1196,12 +1023,17 @@ export default function WordLinkGame() {
     setTimeout(() => setShowCopied(false), 2500);
   };
 
+  const goHome = useCallback(() => {
+    setShowArchiveModal(false);
+    if (activeDate !== today) setActiveDate(today);
+    setScreen("home");
+  }, [activeDate, today]);
+
   const timerPct = (timeLeft / TOTAL_TIME) * 100;
   const isLow = timerEnabled && timeLeft < 30;
   const wrongDanger = wrongGuesses >= MAX_WRONG - 1;
   const rootClass = `wl-root${lightMode ? " wl-light" : ""}`;
 
-  // ─── RENDER ──────────────────────────────────────────────────────────────────
   if (loading) {
     return (
       <>
@@ -1224,50 +1056,25 @@ export default function WordLinkGame() {
             <button
               type="button" className="wl-logo"
               onClick={() => {
-                if (screen === "game" && gameStatus === "playing") {
-                  setShowLeaveConfirm(true);
-                } else {
-                  if (activeDate !== today) setActiveDate(today);
-                  setScreen("home");
-                }
+                if (screen === "game" && gameStatus === "playing") setShowLeaveConfirm(true);
+                else goHome();
               }}
-              style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }}
               aria-label="Return to home"
             >
               Word<span style={{ color: "var(--accent)" }}>Fuse</span>
             </button>
 
-            <div style={{ display: "flex", alignItems: "center", gap: 8, position: "relative" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <div className="wl-date">{activeDate === today ? "Daily Game" : puzzle.puzzle_date}</div>
-
-              {/* Archive button — hidden during active gameplay */}
-              {screen !== "game" && (
-                <div className="wl-tt">
-                  <button className="wl-calendar-btn" onClick={openArchiveModal} aria-label="Browse past puzzles">📅</button>
-                  <div className="wl-tt-bubble">Archived Games</div>
-                </div>
-              )}
-
-              {/* Help button + tooltip */}
-              <div className="wl-tt">
-                <button
-                  className="wl-icon-btn"
-                  onClick={() => setShowHelp(true)}
-                  aria-label="How to play"
-                >?</button>
-                <div className="wl-tt-bubble">How to Play</div>
-              </div>
-
-              {/* Settings button + tooltip */}
-              <div className="wl-tt">
-                <button
-                  className="wl-icon-btn"
-                  onClick={() => setShowSettings(true)}
-                  aria-label="Settings"
-                  style={{ fontSize: 13 }}
-                >⚙</button>
-                <div className="wl-tt-bubble">Settings</div>
-              </div>
+              <button
+                className="wl-hamburger"
+                onClick={() => setShowMenu(true)}
+                aria-label="Open menu"
+              >
+                <div className="wl-hamburger-line" />
+                <div className="wl-hamburger-line" />
+                <div className="wl-hamburger-line" />
+              </button>
             </div>
           </header>
         </div>
@@ -1297,7 +1104,7 @@ export default function WordLinkGame() {
               ))}
             </div>
             <button className="wl-btn wl-btn-primary" style={{ maxWidth: 320 }} onClick={() => setScreen("game")}>
-              {activeDate === today ? "Play Today's Puzzle" : `Play Game from ${activeDate}`}
+              {activeDate === today ? "Play Today's Puzzle" : `Play Puzzle from ${activeDate}`}
             </button>
           </div>
         )}
@@ -1310,8 +1117,7 @@ export default function WordLinkGame() {
                 <div className="wl-hud-label">Time</div>
                 {timerEnabled
                   ? <div className={`wl-hud-value ${isLow ? "danger" : timeLeft < 60 ? "warning" : ""}`}>{formatTime(timeLeft)}</div>
-                  : <div className="wl-hud-value" style={{ fontSize: 20, color: "var(--text-muted)" }}>∞</div>
-                }
+                  : <div className="wl-hud-value" style={{ fontSize: 20, color: "var(--text-muted)" }}>∞</div>}
               </div>
               <div className="wl-hud-cell">
                 <div className="wl-hud-label">Wrong</div>
@@ -1394,64 +1200,26 @@ export default function WordLinkGame() {
           </div>
         )}
 
-        {/* ── MODALS ── */}
+        {/* ── RESULTS ── */}
         {screen === "results" && (
           <ResultsModal
             gameStatus={gameStatus} timeLeft={timeLeft} wrongGuesses={wrongGuesses}
             completed={completed} stats={stats} puzzle={puzzle} timerEnabled={timerEnabled}
-            onShareResults={shareResults} onViewStats={() => setScreen("stats")}
-            onGoHome={() => { setShowArchiveModal(false); setScreen("home"); }}
+            isToday={activeDate === today}
+            onShareResults={shareResults}
+            onViewStats={() => setScreen("stats")}
+            onGoHome={goHome}
             onViewArchived={openArchiveModal}
           />
         )}
 
-        {showArchiveModal && (
-          <ArchiveDatesModal
-            archivedDates={archivedDates} loadingArchiveDates={loadingArchiveDates}
-            today={today} completedDates={completedDates}
-            onSelectDate={date => { setShowArchiveModal(false); setScreen("game"); setActiveDate(date); }}
-            onClose={() => setShowArchiveModal(false)}
-          />
-        )}
-
-        {showLeaveConfirm && (
-          <div className="wl-overlay" onClick={() => setShowLeaveConfirm(false)}>
-            <div className="wl-modal" style={{ maxWidth: 340, textAlign: "center" }} onClick={e => e.stopPropagation()}>
-              <div style={{ fontSize: 36, marginBottom: 12 }}>🚪</div>
-              <div className="wl-modal-title" style={{ fontSize: 22, textAlign: "center", marginBottom: 8 }}>Leave game?</div>
-              <div className="wl-modal-sub" style={{ marginBottom: 24 }}>
-                Your progress will be lost. Are you sure you want to go back to the home screen?
-              </div>
-              <button
-                className="wl-btn wl-btn-primary"
-                onClick={() => {
-                  setShowLeaveConfirm(false);
-                  if (activeDate !== today) setActiveDate(today);
-                  setScreen("home");
-                }}
-              >Yes, leave game</button>
-              <button
-                className="wl-btn wl-btn-ghost"
-                onClick={() => setShowLeaveConfirm(false)}
-              >Keep playing</button>
-            </div>
-          </div>
-        )}
-
-        {showSettings && (
-          <SettingsModal
-            lightMode={lightMode} timerEnabled={timerEnabled}
-            onToggleLight={toggleLightMode} onToggleTimer={toggleTimerEnabled}
-            onClose={() => setShowSettings(false)}
-          />
-        )}
-
+        {/* ── STATS ── */}
         {screen === "stats" && stats && (
           <div className="wl-overlay">
             <div className="wl-modal">
-              <div className="wl-stats-header">
+              <div className="wl-modal-header">
                 <div className="wl-modal-title" style={{ fontSize: 24 }}>Statistics</div>
-                <button onClick={() => setScreen("results")} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 22 }} aria-label="Close">×</button>
+                <CloseBtn onClick={() => setScreen("results")} />
               </div>
               <div className="wl-result-grid">
                 <div className="wl-result-cell"><div className="wl-result-val">{stats.games_played}</div><div className="wl-result-label">Played</div></div>
@@ -1470,12 +1238,40 @@ export default function WordLinkGame() {
           </div>
         )}
 
+        {/* ── ARCHIVE CALENDAR ── */}
+        {showArchiveModal && (
+          <CalendarArchive
+            archivedDates={archivedDates}
+            loadingArchiveDates={loadingArchiveDates}
+            today={today}
+            completedDates={completedDates}
+            onSelectDate={date => { setShowArchiveModal(false); setScreen("game"); setActiveDate(date); }}
+            onClose={() => setShowArchiveModal(false)}
+          />
+        )}
+
+        {/* ── NAV MENU ── */}
+        {showMenu && (
+          <NavDrawer
+            onClose={() => setShowMenu(false)}
+            onHelp={() => setShowHelp(true)}
+            onSettings={() => setShowSettings(true)}
+            onArchive={openArchiveModal}
+            onHome={() => {
+              if (screen === "game" && gameStatus === "playing") setShowLeaveConfirm(true);
+              else goHome();
+            }}
+            showArchive={screen !== "game"}
+          />
+        )}
+
+        {/* ── HOW TO PLAY ── */}
         {showHelp && (
           <div className="wl-overlay" onClick={() => { setShowHelp(false); localStorage.setItem("wl_seen_help", "1"); }}>
             <div className="wl-modal" onClick={e => e.stopPropagation()}>
-              <div className="wl-stats-header" style={{ marginBottom: 16 }}>
+              <div className="wl-modal-header" style={{ marginBottom: 16 }}>
                 <div className="wl-modal-title" style={{ fontSize: 24 }}>How to Play</div>
-                <button onClick={() => { setShowHelp(false); localStorage.setItem("wl_seen_help", "1"); }} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 22 }}>×</button>
+                <CloseBtn onClick={() => { setShowHelp(false); localStorage.setItem("wl_seen_help", "1"); }} />
               </div>
               <p style={{ fontFamily: "var(--font-body)", fontSize: 13, color: "var(--text-muted)", lineHeight: 1.6, marginBottom: 16 }}>
                 Enter one word per round that can pair with all three clues, either before or after each clue word to form a compound word or common phrase.
@@ -1496,6 +1292,28 @@ export default function WordLinkGame() {
                 <div className="wl-rule"><div className="wl-rule-icon">🎯</div> Solve all 4 rounds to win</div>
               </div>
               <button className="wl-btn wl-btn-ghost" style={{ marginTop: 16 }} onClick={() => { setShowHelp(false); localStorage.setItem("wl_seen_help", "1"); }}>Got it</button>
+            </div>
+          </div>
+        )}
+
+        {/* ── SETTINGS ── */}
+        {showSettings && (
+          <SettingsModal
+            lightMode={lightMode} timerEnabled={timerEnabled}
+            onToggleLight={toggleLightMode} onToggleTimer={toggleTimerEnabled}
+            onClose={() => setShowSettings(false)}
+          />
+        )}
+
+        {/* ── LEAVE CONFIRM ── */}
+        {showLeaveConfirm && (
+          <div className="wl-overlay" onClick={() => setShowLeaveConfirm(false)}>
+            <div className="wl-modal" style={{ maxWidth: 340, textAlign: "center" }} onClick={e => e.stopPropagation()}>
+              <div style={{ fontSize: 36, marginBottom: 12 }}>🚪</div>
+              <div className="wl-modal-title" style={{ fontSize: 22, textAlign: "center", marginBottom: 8 }}>Leave game?</div>
+              <div className="wl-modal-sub" style={{ marginBottom: 24 }}>Your progress will be lost. Are you sure you want to go back to the home screen?</div>
+              <button className="wl-btn wl-btn-primary" onClick={() => { setShowLeaveConfirm(false); setShowMenu(false); goHome(); }}>Yes, leave game</button>
+              <button className="wl-btn wl-btn-ghost" onClick={() => setShowLeaveConfirm(false)}>Keep playing</button>
             </div>
           </div>
         )}
