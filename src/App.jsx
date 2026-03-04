@@ -890,6 +890,7 @@ export default function WordLinkGame() {
   const [showCopied, setShowCopied] = useState(false);
   const [showArchiveModal, setShowArchiveModal] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [archivedDates, setArchivedDates] = useState([]);
   const [loadingArchiveDates, setLoadingArchiveDates] = useState(false);
   const [completedDates, setCompletedDates] = useState(new Set());
@@ -907,6 +908,7 @@ export default function WordLinkGame() {
   useEffect(() => {
     const handler = e => {
       if (e.key !== "Escape") return;
+      if (showLeaveConfirm) { setShowLeaveConfirm(false); return; }
       if (showSettings) { setShowSettings(false); return; }
       if (showArchiveModal) { setShowArchiveModal(false); return; }
       if (showHelp) { setShowHelp(false); localStorage.setItem("wl_seen_help", "1"); return; }
@@ -915,7 +917,7 @@ export default function WordLinkGame() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [showSettings, showArchiveModal, showHelp, showCopied, screen]);
+  }, [showLeaveConfirm, showSettings, showArchiveModal, showHelp, showCopied, screen]);
 
   const resetBoard = () => {
     setGuesses(["", "", "", ""]);
@@ -1221,7 +1223,14 @@ export default function WordLinkGame() {
           <header className="wl-header">
             <button
               type="button" className="wl-logo"
-              onClick={() => { if (activeDate !== today) setActiveDate(today); setScreen("home"); }}
+              onClick={() => {
+                if (screen === "game" && gameStatus === "playing") {
+                  setShowLeaveConfirm(true);
+                } else {
+                  if (activeDate !== today) setActiveDate(today);
+                  setScreen("home");
+                }
+              }}
               style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }}
               aria-label="Return to home"
             >
@@ -1231,11 +1240,13 @@ export default function WordLinkGame() {
             <div style={{ display: "flex", alignItems: "center", gap: 8, position: "relative" }}>
               <div className="wl-date">{activeDate === today ? "Daily Game" : puzzle.puzzle_date}</div>
 
-              {/* Archive button + tooltip */}
-              <div className="wl-tt">
-                <button className="wl-calendar-btn" onClick={openArchiveModal} aria-label="Browse past puzzles">📅</button>
-                <div className="wl-tt-bubble">Archived Games</div>
-              </div>
+              {/* Archive button — hidden during active gameplay */}
+              {screen !== "game" && (
+                <div className="wl-tt">
+                  <button className="wl-calendar-btn" onClick={openArchiveModal} aria-label="Browse past puzzles">📅</button>
+                  <div className="wl-tt-bubble">Archived Games</div>
+                </div>
+              )}
 
               {/* Help button + tooltip */}
               <div className="wl-tt">
@@ -1401,6 +1412,30 @@ export default function WordLinkGame() {
             onSelectDate={date => { setShowArchiveModal(false); setScreen("game"); setActiveDate(date); }}
             onClose={() => setShowArchiveModal(false)}
           />
+        )}
+
+        {showLeaveConfirm && (
+          <div className="wl-overlay" onClick={() => setShowLeaveConfirm(false)}>
+            <div className="wl-modal" style={{ maxWidth: 340, textAlign: "center" }} onClick={e => e.stopPropagation()}>
+              <div style={{ fontSize: 36, marginBottom: 12 }}>🚪</div>
+              <div className="wl-modal-title" style={{ fontSize: 22, textAlign: "center", marginBottom: 8 }}>Leave game?</div>
+              <div className="wl-modal-sub" style={{ marginBottom: 24 }}>
+                Your progress will be lost. Are you sure you want to go back to the home screen?
+              </div>
+              <button
+                className="wl-btn wl-btn-primary"
+                onClick={() => {
+                  setShowLeaveConfirm(false);
+                  if (activeDate !== today) setActiveDate(today);
+                  setScreen("home");
+                }}
+              >Yes, leave game</button>
+              <button
+                className="wl-btn wl-btn-ghost"
+                onClick={() => setShowLeaveConfirm(false)}
+              >Keep playing</button>
+            </div>
+          </div>
         )}
 
         {showSettings && (
