@@ -1490,7 +1490,7 @@ export default function WordLinkGame() {
                 <div className="ex-answer">→ BREAK &nbsp;<span style={{ color: "var(--text-muted)", fontSize: 11 }}>heartbreak · breakfast · breakdown</span></div>
               </div>
               <div className="wl-rules" style={{ marginBottom: 8 }}>
-                <div className="wl-rule"><div className="wl-rule-icon">⏱</div> You have <strong>&nbsp;3 minutes</strong></div>
+                <div className="wl-rule"><div className="wl-rule-icon">⏱</div> {timerEnabled ? <>You have <strong>&nbsp;3 minutes</strong></> : <>No timer — <strong>&nbsp;play at your own pace</strong></>}</div>
                 <div className="wl-rule"><div className="wl-rule-icon">❌</div> Only <strong>&nbsp;4 wrong guesses</strong> allowed</div>
                 <div className="wl-rule"><div className="wl-rule-icon">🔗</div> Word can come before OR after each clue</div>
                 <div className="wl-rule"><div className="wl-rule-icon">🎯</div> Solve all 4 rounds to win</div>
