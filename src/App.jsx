@@ -696,10 +696,10 @@ const SettingsModal = ({ lightMode, timerEnabled, onToggleLight, onToggleTimer, 
 
       <div className="wl-settings-row">
         <div className="wl-settings-label">
-          <div className="wl-settings-label-title">{lightMode ? "☀️ Light Mode" : "🌙 Dark Mode"}</div>
-          <div className="wl-settings-label-sub">Switch between dark and light theme</div>
+          <div className="wl-settings-label-title">🌙 Dark Mode</div>
+          <div className="wl-settings-label-sub">Switch to a dark theme</div>
         </div>
-        <Toggle checked={lightMode} onChange={onToggleLight} />
+        <Toggle checked={!lightMode} onChange={val => onToggleLight(!val)} />
       </div>
 
       <div className="wl-settings-row">
@@ -839,7 +839,7 @@ export default function WordLinkGame() {
   const today = getTodayEST();
 
   // ── Persisted settings ──
-  const [lightMode, setLightMode] = useState(() => localStorage.getItem("wl_light_mode") === "true");
+  const [lightMode, setLightMode] = useState(() => localStorage.getItem("wl_light_mode") !== "false");
   const [timerEnabled, setTimerEnabled] = useState(() => localStorage.getItem("wl_timer_enabled") !== "false");
 
   const toggleLightMode = useCallback(val => {
