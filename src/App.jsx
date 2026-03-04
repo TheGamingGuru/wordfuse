@@ -221,6 +221,10 @@ const css = `
     width: 30px;
     height: 30px;
     min-width: 30px;
+    min-height: 30px;
+    padding: 0;
+    line-height: 1;
+    overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -426,6 +430,12 @@ const css = `
     color: var(--accent);
     font-weight: 600;
   }
+  .wl-light .wl-letter-input.gold {
+    background: color-mix(in srgb, var(--accent) 18%, var(--surface2));
+    border-color: var(--accent);
+    color: #7a5a00;
+    font-weight: 700;
+  }
   .wl-letter-input:disabled { opacity: 0.8; cursor: not-allowed; }
 
   .wl-submit {
@@ -603,9 +613,16 @@ const css = `
     border-color: var(--green);
     background: color-mix(in srgb, var(--green) 8%, var(--surface2));
   }
+  .wl-light .wl-archive-date-btn.completed {
+    border-color: var(--green);
+    background: color-mix(in srgb, var(--green) 14%, var(--surface2));
+    color: #0f5c34;
+  }
   .wl-archive-date-btn.completed:hover { border-color: var(--green); color: var(--green); }
+  .wl-light .wl-archive-date-btn.completed:hover { color: #0f5c34; }
   .wl-archive-date-tag { font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--accent); }
   .wl-archive-completed-tag { font-size: 12px; color: var(--green); display: flex; align-items: center; gap: 3px; }
+  .wl-light .wl-archive-completed-tag { color: #0f5c34; }
   .wl-archive-empty { margin: 18px 0; text-align: center; color: var(--text-muted); font-family: var(--font-body); font-size: 14px; }
   .wl-result-nav-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
 
