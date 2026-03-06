@@ -225,7 +225,7 @@ const css = `
   .wl-nav-divider { height: 1px; background: var(--border); margin: 8px 20px; }
 
   /* HUD */
-  .wl-hud { width: 100%; max-width: 560px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin: 0 auto 12px; }
+  .wl-hud { width: 100%; max-width: 560px; display: grid; gap: 10px; margin: 0 auto 12px; }
   .wl-hud-sticky {
     width: 100%; position: sticky; top: 70px; z-index: 15;
     display: flex; flex-direction: column; align-items: center;
@@ -703,7 +703,7 @@ export default function WordLinkGame() {
   const today = getTodayEST();
 
   const [lightMode, setLightMode] = useState(() => localStorage.getItem("wl_light_mode") !== "false");
-  const [timerEnabled, setTimerEnabled] = useState(() => localStorage.getItem("wl_timer_enabled") !== "false");
+  const [timerEnabled, setTimerEnabled] = useState(() => localStorage.getItem("wl_timer_enabled") === "true");
 
   const toggleLightMode = useCallback(val => { setLightMode(val); localStorage.setItem("wl_light_mode", String(val)); }, []);
   const toggleTimerEnabled = useCallback(val => { setTimerEnabled(val); localStorage.setItem("wl_timer_enabled", String(val)); }, []);
@@ -1115,13 +1115,13 @@ export default function WordLinkGame() {
         {/* ── HUD ── */}
         {screen === "game" && (
           <div className="wl-hud-sticky">
-            <div className="wl-hud">
+            <div className="wl-hud" style={{ gridTemplateColumns: timerEnabled ? "1fr 1fr 1fr" : "1fr 1fr", maxWidth: timerEnabled ? 560 : 380 }}>
+              {timerEnabled && (
               <div className="wl-hud-cell">
                 <div className="wl-hud-label">Time</div>
-                {timerEnabled
-                  ? <div className={`wl-hud-value ${isLow ? "danger" : timeLeft < 60 ? "warning" : ""}`}>{formatTime(timeLeft)}</div>
-                  : <div className="wl-hud-value" style={{ fontSize: 20, color: "var(--text-muted)" }}>∞</div>}
+                <div className={`wl-hud-value ${isLow ? "danger" : timeLeft < 60 ? "warning" : ""}`}>{formatTime(timeLeft)}</div>
               </div>
+              )}
               <div className="wl-hud-cell">
                 <div className="wl-hud-label">Wrong</div>
                 <div className={`wl-hud-value ${wrongDanger ? "danger" : wrongGuesses > 0 ? "warning" : ""}`}>
@@ -1289,7 +1289,7 @@ export default function WordLinkGame() {
                 <div className="ex-answer">→ BREAK &nbsp;<span style={{ color: "var(--text-muted)", fontSize: 11 }}>heartbreak · breakfast · breakdown</span></div>
               </div>
               <div className="wl-rules" style={{ marginBottom: 8 }}>
-                <div className="wl-rule"><div className="wl-rule-icon">⏱</div> {timerEnabled ? <>You have <strong>&nbsp;3 minutes</strong></> : <>No timer — <strong>&nbsp;play at your own pace</strong></>}</div>
+                <div className="wl-rule"><div className="wl-rule-icon">⏱</div> {timerEnabled ? <>You have <strong>&nbsp;3 minutes</strong></> : <>No timer — play at your own pace. <span style={{ color: "var(--accent)" }}>Enable in ☰ Settings.</span></>}</div>
                 <div className="wl-rule"><div className="wl-rule-icon">❌</div> Only <strong>&nbsp;4 wrong guesses</strong> allowed</div>
                 <div className="wl-rule"><div className="wl-rule-icon">🔗</div> Word can come before OR after each clue</div>
                 <div className="wl-rule"><div className="wl-rule-icon">🎯</div> Solve all 4 rounds to win</div>
