@@ -70,7 +70,8 @@ const css = `
     --bg: #0f0e17;
     --surface: #1a1927;
     --surface2: #231f35;
-    --border: #2e2a45;
+    --surface3: #2e2a42;
+    --border: #3a3555;
     --accent: #e8c547;
     --accent2: #ff6b6b;
     --green: #52d68a;
@@ -263,7 +264,8 @@ const css = `
 
   .wl-answer-entry { display: flex; flex-direction: column; align-items: center; gap: 10px; }
   .wl-input-row { display: flex; gap: 8px; justify-content: center; align-items: center; }
-  .wl-letter-input { width: 42px; height: 42px; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; font-family: var(--font-mono); font-size: 18px; color: var(--text); text-transform: uppercase; text-align: center; outline: none; transition: border-color 0.2s, transform 0.1s, background 0.2s, color 0.2s; }
+  .wl-letter-input { width: 42px; height: 42px; background: var(--surface3, var(--surface2)); border: 1px solid var(--border); border-radius: 10px; font-family: var(--font-mono); font-size: 18px; color: var(--text); text-transform: uppercase; text-align: center; outline: none; transition: border-color 0.2s, transform 0.1s, background 0.2s, color 0.2s; }
+  .wl-light .wl-letter-input { background: var(--surface2); }
   .wl-letter-input:focus { border-color: var(--accent); transform: translateY(-1px); }
   .wl-letter-input.gold { background: color-mix(in srgb, var(--accent) 22%, var(--surface2)); border-color: var(--accent); color: var(--accent); font-weight: 600; }
   .wl-light .wl-letter-input.gold { background: color-mix(in srgb, var(--accent) 18%, var(--surface2)); border-color: var(--accent); color: #7a5a00; font-weight: 700; }
@@ -788,10 +790,32 @@ export default function WordLinkGame() {
       setArchivedDates((puzzleDates || []).map(r => r.puzzle_date).filter(Boolean));
       const uid = getUserId();
       const { data: results } = await supabase.from("game_results").select("puzzle_date").eq("user_id", uid).eq("completed", true);
-      setCompletedDates(new Set((results || []).map(r => r.puzzle_date).filter(Boolean)));
+      const remoteWins = (results || []).map(r => r.puzzle_date).filter(Boolean);
+      // Also check localStorage for any wins recorded this session (handles timing gaps)
+      const localWins = Object.keys(localStorage)
+        .filter(k => k.startsWith("wl_played_"))
+        .map(k => {
+          try {
+            const saved = JSON.parse(localStorage.getItem(k));
+            const date = k.replace("wl_played_", "");
+            return saved?.gameStatus === "won" ? date : null;
+          } catch (_) { return null; }
+        })
+        .filter(Boolean);
+      setCompletedDates(new Set([...remoteWins, ...localWins]));
     } catch (_) {
       setArchivedDates([]);
-      setCompletedDates(new Set());
+      // Fall back to localStorage only
+      const localWins = Object.keys(localStorage)
+        .filter(k => k.startsWith("wl_played_"))
+        .map(k => {
+          try {
+            const saved = JSON.parse(localStorage.getItem(k));
+            return saved?.gameStatus === "won" ? k.replace("wl_played_", "") : null;
+          } catch (_) { return null; }
+        })
+        .filter(Boolean);
+      setCompletedDates(new Set(localWins));
     } finally {
       setLoadingArchiveDates(false);
     }
