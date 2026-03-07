@@ -846,7 +846,7 @@ export default function WordLinkGame() {
       writeDateParam(url, activeDate, today);
       window.history.replaceState({}, "", url);
 
-      const savedResult = activeDate === today ? localStorage.getItem(`wl_played_${today}`) : null;
+      const savedResult = localStorage.getItem(`wl_played_${activeDate}`);
       if (savedResult) {
         const saved = JSON.parse(savedResult);
         setCompleted(saved.completed);
@@ -918,12 +918,11 @@ export default function WordLinkGame() {
     const finalTimeLeft = overrides.timeLeft ?? timeLeft;
     const finalHintLetters = overrides.hintLetters ?? hintLetters;
 
-    if (activeDate === today) {
-      localStorage.setItem(`wl_played_${today}`, JSON.stringify({
-        completed: finalCompleted, wrongGuesses: finalWrongGuesses,
-        timeLeft: finalTimeLeft, hintLetters: finalHintLetters, gameStatus: status,
-      }));
-    }
+    // Save to localStorage for all dates (used to show completion in archive)
+    localStorage.setItem(`wl_played_${activeDate}`, JSON.stringify({
+      completed: finalCompleted, wrongGuesses: finalWrongGuesses,
+      timeLeft: finalTimeLeft, hintLetters: finalHintLetters, gameStatus: status,
+    }));
 
     const uid = getUserId();
     const timeTaken = TOTAL_TIME - finalTimeLeft;
