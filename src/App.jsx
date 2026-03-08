@@ -502,7 +502,7 @@ const SettingsModal = ({ lightMode, timerEnabled, onToggleLight, onToggleTimer, 
 );
 
 // ─── RESULTS MODAL ────────────────────────────────────────────────────────────
-const ResultsModal = ({ gameStatus, timeLeft, wrongGuesses, completed, stats, puzzle, timerEnabled, isToday, onShareResults, onViewStats, onGoHome, onViewArchived }) => {
+const ResultsModal = ({ gameStatus, timeTaken, wrongGuesses, completed, stats, puzzle, timerEnabled, isToday, onShareResults, onViewStats, onGoHome, onViewArchived }) => {
   const countdownSecs = useCountdown(isToday);
 
   return (
@@ -520,14 +520,14 @@ const ResultsModal = ({ gameStatus, timeLeft, wrongGuesses, completed, stats, pu
         </div>
         <div className="wl-modal-sub">
           {gameStatus === "won"
-            ? `Solved${timerEnabled ? ` in ${formatTime(TOTAL_TIME - timeLeft)}` : ""} with ${wrongGuesses} wrong guess${wrongGuesses !== 1 ? "es" : ""}`
+            ? `Solved in ${formatTime(timeTaken)} with ${wrongGuesses} wrong guess${wrongGuesses !== 1 ? "es" : ""}`
             : "Better luck tomorrow!"}
         </div>
 
         <div className="wl-result-grid">
-          {timerEnabled && (
+          {gameStatus === "won" && (
             <div className="wl-result-cell">
-              <div className="wl-result-val">{formatTime(TOTAL_TIME - timeLeft)}</div>
+              <div className="wl-result-val">{formatTime(timeTaken)}</div>
               <div className="wl-result-label">Time Taken</div>
             </div>
           )}
@@ -740,8 +740,10 @@ export default function WordLinkGame() {
   const [hintLetters, setHintLetters] = useState(["", "", "", ""]);
   const [wrongPerRound, setWrongPerRound] = useState([0, 0, 0, 0]);
   const [activeRoundIdx, setActiveRoundIdx] = useState(0);
+  const [timeTaken, setTimeTaken] = useState(0);
 
   const timerRef = useRef(null);
+  const gameStartTimeRef = useRef(null);
   const letterInputRefs = useRef([[], [], [], []]);
   const roundRefs = useRef([]);
   const gameStatusRef = useRef("playing");
@@ -854,6 +856,7 @@ export default function WordLinkGame() {
         setTimeLeft(saved.timeLeft);
         setHintLetters(saved.hintLetters || ["", "", "", ""]);
         setGameStatus(saved.gameStatus);
+        if (saved.timeTaken) setTimeTaken(saved.timeTaken);
       }
 
       setLoading(false);
@@ -918,14 +921,22 @@ export default function WordLinkGame() {
     const finalTimeLeft = overrides.timeLeft ?? timeLeft;
     const finalHintLetters = overrides.hintLetters ?? hintLetters;
 
+    // Compute elapsed time — use countdown remainder if timer on, wall-clock if timer off
+    const timerElapsed = TOTAL_TIME - finalTimeLeft;
+    const wallElapsed = gameStartTimeRef.current
+      ? Math.round((Date.now() - gameStartTimeRef.current) / 1000)
+      : 0;
+    const timeTaken = timerEnabled ? timerElapsed : wallElapsed;
+
     // Save to localStorage for all dates (used to show completion in archive)
     localStorage.setItem(`wl_played_${activeDate}`, JSON.stringify({
       completed: finalCompleted, wrongGuesses: finalWrongGuesses,
       timeLeft: finalTimeLeft, hintLetters: finalHintLetters, gameStatus: status,
+      timeTaken,
     }));
+    setTimeTaken(timeTaken);
 
     const uid = getUserId();
-    const timeTaken = TOTAL_TIME - finalTimeLeft;
     const isWin = status === "won";
     try {
       const { data: cur } = await supabase.from("user_stats").select("*").eq("user_id", uid).single();
@@ -936,13 +947,13 @@ export default function WordLinkGame() {
         games_won: (cur?.games_won || 0) + (isWin ? 1 : 0),
         current_streak: newStreak,
         max_streak: Math.max(newStreak, cur?.max_streak || 0),
-        best_time: isWin && timerEnabled && (!cur?.best_time || timeTaken < cur.best_time) ? timeTaken : cur?.best_time,
+        best_time: isWin && (!cur?.best_time || timeTaken < cur.best_time) ? timeTaken : cur?.best_time,
       };
       await supabase.from("user_stats").upsert(updated);
       setStats(updated);
       await supabase.from("game_results").insert({
         user_id: uid, puzzle_date: puzzle.puzzle_date,
-        completed: isWin, time_taken: timerEnabled ? timeTaken : null,
+        completed: isWin, time_taken: timeTaken,
         wrong_guesses: finalWrongGuesses,
       });
     } catch (_) {}
@@ -1052,6 +1063,10 @@ export default function WordLinkGame() {
   const goHome = useCallback(() => {
     setShowArchiveModal(false);
     if (activeDate !== today) setActiveDate(today);
+    // Always clear any ?date= param from the URL so refresh lands on today
+    const url = new URL(window.location.href);
+    url.searchParams.delete("date");
+    window.history.replaceState({}, "", url);
     setScreen("home");
   }, [activeDate, today]);
 
@@ -1129,7 +1144,7 @@ export default function WordLinkGame() {
                 </div>
               ))}
             </div>
-            <button className="wl-btn wl-btn-primary" style={{ maxWidth: 320 }} onClick={() => setScreen("game")}>
+            <button className="wl-btn wl-btn-primary" style={{ maxWidth: 320 }} onClick={() => { gameStartTimeRef.current = Date.now(); setScreen("game"); }}>
               {activeDate === today ? "Play Today's Puzzle" : `Play Puzzle from ${activeDate}`}
             </button>
           </div>
@@ -1229,7 +1244,7 @@ export default function WordLinkGame() {
         {/* ── RESULTS ── */}
         {screen === "results" && (
           <ResultsModal
-            gameStatus={gameStatus} timeLeft={timeLeft} wrongGuesses={wrongGuesses}
+            gameStatus={gameStatus} timeTaken={timeTaken} wrongGuesses={wrongGuesses}
             completed={completed} stats={stats} puzzle={puzzle} timerEnabled={timerEnabled}
             isToday={activeDate === today}
             onShareResults={shareResults}
@@ -1271,7 +1286,7 @@ export default function WordLinkGame() {
             loadingArchiveDates={loadingArchiveDates}
             today={today}
             completedDates={completedDates}
-            onSelectDate={date => { setShowArchiveModal(false); setScreen("game"); setActiveDate(date); }}
+            onSelectDate={date => { setShowArchiveModal(false); gameStartTimeRef.current = Date.now(); setScreen("game"); setActiveDate(date); }}
             onClose={() => setShowArchiveModal(false)}
           />
         )}
