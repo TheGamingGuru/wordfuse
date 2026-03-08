@@ -997,7 +997,7 @@ export default function WordLinkGame() {
         // First wrong: reveal before/after position indicators from puzzle data
         const positions = puzzle.rounds[roundIdx].positions ?? [];
         setDirectionHints(d => d.map((v, i) => i === roundIdx ? positions : v));
-        setErrorMsgs(e => e.map((m, i) => i === roundIdx ? "Hint: see position arrows on each word" : m));
+        setErrorMsgs(e => e.map((m, i) => i === roundIdx ? "Hint: position arrows indicate if the secret word comes before or after each clue word" : m));
       } else if (roundWrong === 2 && !isLosing) {
         // Second wrong: reveal 1st letter
         const rev = answer.slice(0, 1).toUpperCase();
