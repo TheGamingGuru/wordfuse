@@ -260,7 +260,12 @@ const css = `
   .wl-round-num { font-family: var(--font-mono); font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-muted); }
   .wl-round-solved-badge { font-family: var(--font-mono); font-size: 10px; letter-spacing: 1px; color: var(--green); text-transform: uppercase; }
   .wl-words { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
-  .wl-word { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 8px; text-align: center; font-family: var(--font-word); font-size: 16px; font-weight: 800; letter-spacing: 1px; line-height: 1.05; color: var(--text); text-transform: uppercase; text-shadow: 0 1px 0 rgba(0,0,0,0.12); }
+  .wl-word { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 8px 12px; text-align: center; font-family: var(--font-word); font-size: 16px; font-weight: 800; letter-spacing: 1px; line-height: 1.05; color: var(--text); text-transform: uppercase; text-shadow: 0 1px 0 rgba(0,0,0,0.12); position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; }
+  .wl-word-label { flex: 1; display: flex; align-items: center; justify-content: center; padding: 4px 0; }
+  .wl-dir-bar { width: 60%; height: 4px; border-radius: 2px; flex-shrink: 0; animation: fadeIn 0.3s ease; }
+  .wl-dir-bar.before { background: var(--accent); }
+  .wl-dir-bar.after  { background: var(--green); }
+  .wl-dir-spacer { height: 4px; flex-shrink: 0; }
 
   .wl-answer-entry { display: flex; flex-direction: column; align-items: center; gap: 10px; }
   .wl-input-row { display: flex; gap: 8px; justify-content: center; align-items: center; }
@@ -741,6 +746,7 @@ export default function WordLinkGame() {
   const [wrongPerRound, setWrongPerRound] = useState([0, 0, 0, 0]);
   const [activeRoundIdx, setActiveRoundIdx] = useState(0);
   const [timeTaken, setTimeTaken] = useState(0);
+  const [directionHints, setDirectionHints] = useState([null, null, null, null]);
 
   const timerRef = useRef(null);
   const gameStartTimeRef = useRef(null);
@@ -857,6 +863,7 @@ export default function WordLinkGame() {
         setHintLetters(saved.hintLetters || ["", "", "", ""]);
         setGameStatus(saved.gameStatus);
         if (saved.timeTaken) setTimeTaken(saved.timeTaken);
+        if (saved.directionHints) setDirectionHints(saved.directionHints);
       }
 
       setLoading(false);
@@ -932,7 +939,7 @@ export default function WordLinkGame() {
     localStorage.setItem(`wl_played_${activeDate}`, JSON.stringify({
       completed: finalCompleted, wrongGuesses: finalWrongGuesses,
       timeLeft: finalTimeLeft, hintLetters: finalHintLetters, gameStatus: status,
-      timeTaken,
+      timeTaken, directionHints,
     }));
     setTimeTaken(timeTaken);
 
@@ -973,6 +980,7 @@ export default function WordLinkGame() {
       setCompleted(newCompleted);
       setErrorMsgs(e => e.map((m, i) => i === roundIdx ? "" : m));
       setHintLetters(h => h.map((l, i) => i === roundIdx ? "" : l));
+      setDirectionHints(d => d.map((v, i) => i === roundIdx ? null : v));
       const next = newCompleted.findIndex(d => !d);
       if (next !== -1) { setActiveRoundIdx(next); setTimeout(() => focusLetter(next, hintLetters[next].length), 10); }
       if (newCompleted.every(Boolean)) triggerEndGame("won", { completed: newCompleted });
@@ -982,15 +990,28 @@ export default function WordLinkGame() {
       const newWPR = wrongPerRound.map((w, i) => i === roundIdx ? w + 1 : w);
       setWrongPerRound(newWPR);
       const totalNext = wrongGuesses + 1;
-      const revealed = newWPR[roundIdx];
+      const roundWrong = newWPR[roundIdx]; // 1, 2, or 3 wrongs on this round
       const isLosing = totalNext >= MAX_WRONG;
-      const hintChar = answer[revealed - 1] ?? null;
-      if (hintChar && !isLosing) {
-        const rev = answer.slice(0, revealed);
-        setHintLetters(h => h.map((l, i) => i === roundIdx ? rev.toUpperCase() : l));
-        setGuesses(g => g.map((v, i) => i === roundIdx ? rev : v));
-        setErrorMsgs(e => e.map((m, i) => i === roundIdx ? `Hint: starts with "${rev.toUpperCase()}"` : m));
-        setTimeout(() => focusLetter(roundIdx, Math.min(rev.length, answer.length - 1)), 10);
+
+      if (roundWrong === 1 && !isLosing) {
+        // First wrong: reveal before/after position indicators from puzzle data
+        const positions = puzzle.rounds[roundIdx].positions ?? [];
+        setDirectionHints(d => d.map((v, i) => i === roundIdx ? positions : v));
+        setErrorMsgs(e => e.map((m, i) => i === roundIdx ? "Hint: see position arrows on each word" : m));
+      } else if (roundWrong === 2 && !isLosing) {
+        // Second wrong: reveal 1st letter
+        const rev = answer.slice(0, 1).toUpperCase();
+        setHintLetters(h => h.map((l, i) => i === roundIdx ? rev : l));
+        setGuesses(g => g.map((v, i) => i === roundIdx ? rev.toLowerCase() : v));
+        setErrorMsgs(e => e.map((m, i) => i === roundIdx ? `Hint: starts with "${rev}"` : m));
+        setTimeout(() => focusLetter(roundIdx, Math.min(1, answer.length - 1)), 10);
+      } else if (roundWrong === 3 && !isLosing) {
+        // Third wrong: reveal 2nd letter
+        const rev = answer.slice(0, 2).toUpperCase();
+        setHintLetters(h => h.map((l, i) => i === roundIdx ? rev : l));
+        setGuesses(g => g.map((v, i) => i === roundIdx ? rev.toLowerCase() : v));
+        setErrorMsgs(e => e.map((m, i) => i === roundIdx ? `Hint: starts with "${rev}"` : m));
+        setTimeout(() => focusLetter(roundIdx, Math.min(2, answer.length - 1)), 10);
       } else if (!isLosing) {
         setErrorMsgs(e => e.map((m, i) => i === roundIdx ? "Not quite — try again" : m));
       }
@@ -1195,7 +1216,20 @@ export default function WordLinkGame() {
                   {completed[idx] && <div className="wl-round-solved-badge">✓ Solved</div>}
                 </div>
                 <div className="wl-words">
-                  {round.words.map((w, wi) => <div key={wi} className="wl-word">{w}</div>)}
+                  {round.words.map((w, wi) => {
+                    const dir = directionHints[idx]?.[wi];
+                    return (
+                      <div key={wi} className="wl-word">
+                        {dir === "before"
+                          ? <div className="wl-dir-bar before" title="Answer goes before this word" />
+                          : <div className="wl-dir-spacer" />}
+                        <div className="wl-word-label">{w}</div>
+                        {dir === "after"
+                          ? <div className="wl-dir-bar after" title="Answer goes after this word" />
+                          : <div className="wl-dir-spacer" />}
+                      </div>
+                    );
+                  })}
                 </div>
                 {completed[idx] ? (
                   <div className="wl-answer-reveal">{round.answer.toUpperCase()}</div>
@@ -1328,8 +1362,10 @@ export default function WordLinkGame() {
               </div>
               <div className="wl-rules" style={{ marginBottom: 8 }}>
                 <div className="wl-rule"><div className="wl-rule-icon">⏱</div> {timerEnabled ? <>You have <strong>&nbsp;3 minutes</strong></> : <>No timer — play at your own pace. <span style={{ color: "var(--accent)" }}>Enable in ☰ Settings.</span></>}</div>
-                <div className="wl-rule"><div className="wl-rule-icon">❌</div> Only <strong>&nbsp;4 wrong guesses</strong> allowed</div>
-                <div className="wl-rule"><div className="wl-rule-icon">🔗</div> Word can come before OR after each clue</div>
+                <div className="wl-rule"><div className="wl-rule-icon">❌</div> Only <strong>&nbsp;4 wrong guesses</strong> allowed across all rounds</div>
+                <div className="wl-rule"><div className="wl-rule-icon">🔗</div> The secret word combines with each clue to form a compound word</div>
+                <div className="wl-rule"><div className="wl-rule-icon">💡</div> <span>Wrong guess 1: <strong>position bars</strong> appear — <span style={{ color: "var(--accent)", fontWeight: 700 }}>gold bar on top</span> means secret word goes <em>before</em> that clue, <span style={{ color: "var(--green)", fontWeight: 700 }}>green bar on bottom</span> means it goes <em>after</em></span></div>
+                <div className="wl-rule"><div className="wl-rule-icon">🔤</div> Wrong guess 2 &amp; 3: letter hints are revealed one at a time</div>
                 <div className="wl-rule"><div className="wl-rule-icon">🎯</div> Solve all 4 rounds to win</div>
               </div>
               <button className="wl-btn wl-btn-ghost" style={{ marginTop: 16 }} onClick={() => { setShowHelp(false); localStorage.setItem("wl_seen_help", "1"); }}>Got it</button>
