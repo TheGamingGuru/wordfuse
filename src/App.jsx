@@ -4,7 +4,13 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
 const SUPABASE_URL = 'https://zznhpbacuxeusaogvjtg.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp6bmhwYmFjdXhldXNhb2d2anRnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE4NTY0NzEsImV4cCI6MjA4NzQzMjQ3MX0.PZCulp9d0aGF-OAv6_lkNGs6elB6Q3hYH7U4XniydLk';
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabase = (() => {
+  if (window._wfSupabase) return window._wfSupabase;
+  window._wfSupabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  return window._wfSupabase;
+})();
 
 const TOTAL_TIME = 180;
 const MAX_WRONG = 4;
@@ -443,7 +449,7 @@ const useCountdown = (active) => {
 };
 
 // ─── NAV DRAWER ───────────────────────────────────────────────────────────────
-const NavDrawer = ({ onClose, onHelp, onSettings, onArchive, onHome, showArchive }) => (
+const NavDrawer = ({ onClose, onSettings, onArchive, onHome, showArchive }) => (
   <>
     <div className="wl-nav-backdrop" onClick={onClose} />
     <nav className="wl-nav-drawer" role="dialog" aria-label="Navigation menu">
@@ -455,11 +461,6 @@ const NavDrawer = ({ onClose, onHelp, onSettings, onArchive, onHome, showArchive
       <button className="wl-nav-item" onClick={() => { onHome(); onClose(); }}>
         <div className="wl-nav-item-icon">🏠</div>
         Daily Puzzle
-      </button>
-
-      <button className="wl-nav-item" onClick={() => { onHelp(); onClose(); }}>
-        <div className="wl-nav-item-icon">❓</div>
-        How to Play
       </button>
 
       {showArchive && (
@@ -872,6 +873,10 @@ export default function WordLinkGame() {
   }, [activeDate, today]);
 
   useEffect(() => {
+    if (screen === "game") window.scrollTo({ top: 0, behavior: "instant" });
+  }, [screen]);
+
+  useEffect(() => {
     if (screen !== "game" || gameStatus !== "playing") return;
     if (guesses.some(g => g.length > 0)) return;
     const frame = requestAnimationFrame(() => focusLetter(0, 0));
@@ -956,13 +961,13 @@ export default function WordLinkGame() {
         max_streak: Math.max(newStreak, cur?.max_streak || 0),
         best_time: isWin && (!cur?.best_time || timeTaken < cur.best_time) ? timeTaken : cur?.best_time,
       };
-      await supabase.from("user_stats").upsert(updated);
+      await supabase.from("user_stats").upsert(updated, { onConflict: "user_id" });
       setStats(updated);
-      await supabase.from("game_results").insert({
+      await supabase.from("game_results").upsert({
         user_id: uid, puzzle_date: puzzle.puzzle_date,
         completed: isWin, time_taken: timeTaken,
         wrong_guesses: finalWrongGuesses,
-      });
+      }, { onConflict: "user_id,puzzle_date" });
     } catch (_) {}
   }, [timeLeft, wrongGuesses, puzzle, activeDate, today, completed, hintLetters, timerEnabled]);
 
@@ -997,7 +1002,7 @@ export default function WordLinkGame() {
         // First wrong: reveal before/after position indicators from puzzle data
         const positions = puzzle.rounds[roundIdx].positions ?? [];
         setDirectionHints(d => d.map((v, i) => i === roundIdx ? positions : v));
-        setErrorMsgs(e => e.map((m, i) => i === roundIdx ? "Hint: position arrows indicate if the secret word comes before or after each clue word" : m));
+        setErrorMsgs(e => e.map((m, i) => i === roundIdx ? "Hint: see position arrows on each word" : m));
       } else if (roundWrong === 2 && !isLosing) {
         // Second wrong: reveal 1st letter
         const rev = answer.slice(0, 1).toUpperCase();
@@ -1128,6 +1133,14 @@ export default function WordLinkGame() {
 
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <div className="wl-date">{activeDate === today ? "Daily Game" : puzzle.puzzle_date}</div>
+              <button
+                className="wl-hamburger"
+                onClick={() => { setShowHelp(true); localStorage.setItem("wl_seen_help", "1"); }}
+                aria-label="How to play"
+                title="How to play"
+              >
+                <span style={{ fontSize: 15, lineHeight: 1, fontWeight: 700, fontFamily: "var(--font-mono)" }}>?</span>
+              </button>
               <button
                 className="wl-hamburger"
                 onClick={() => setShowMenu(true)}
@@ -1329,7 +1342,6 @@ export default function WordLinkGame() {
         {showMenu && (
           <NavDrawer
             onClose={() => setShowMenu(false)}
-            onHelp={() => setShowHelp(true)}
             onSettings={() => setShowSettings(true)}
             onArchive={openArchiveModal}
             onHome={() => {
