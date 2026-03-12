@@ -116,7 +116,8 @@ const css = `
   .wl-root {
     min-height: 100vh; width: 100%;
     display: flex; flex-direction: column; align-items: center;
-    padding: 24px 16px 48px;
+    /* FIX 1: removed 24px top padding that was causing whitespace above the sticky header */
+    padding: 0 16px 48px;
     background: var(--bg);
     background-image: radial-gradient(ellipse at 20% 0%, #1e1540 0%, transparent 60%),
                       radial-gradient(ellipse at 80% 100%, #1a2840 0%, transparent 60%);
@@ -131,7 +132,8 @@ const css = `
   .wl-header-wrap {
     position: sticky; top: 0; z-index: 20; width: 100%;
     display: flex; justify-content: center;
-    padding: 8px 0 12px; margin-bottom: 20px;
+    /* FIX 2: removed margin-bottom: 20px that was causing the gap between header and HUD */
+    padding: 8px 0 12px; margin-bottom: 0;
     background: linear-gradient(to bottom, var(--header-bg-top), var(--header-bg-mid), var(--header-bg-bot), rgba(0,0,0,0));
     backdrop-filter: blur(8px);
     border-bottom: 1px solid rgba(46,42,69,0.45);
@@ -591,18 +593,15 @@ const CalendarArchive = ({ archivedDates, loadingArchiveDates, today, completedD
 
   const todayYM = today.slice(0, 7); // "YYYY-MM"
   const [viewYM, setViewYM] = useState(() => {
-    // Default to this month, but if today has no puzzles show the last month with puzzles
     return todayYM;
   });
 
   const [viewYear, viewMonthIdx] = viewYM.split("-").map(Number);
-  // viewMonthIdx is 1-indexed
 
   const firstDayOfMonth = new Date(viewYear, viewMonthIdx - 1, 1);
   const daysInMonth = new Date(viewYear, viewMonthIdx, 0).getDate();
-  const startDow = firstDayOfMonth.getDay(); // 0=Sun
+  const startDow = firstDayOfMonth.getDay();
 
-  // All dates in this month that have puzzles
   const monthPrefix = viewYM;
   const monthDates = new Set(archivedDates.filter(d => d.startsWith(monthPrefix)));
 
@@ -708,7 +707,11 @@ export default function WordLinkGame() {
 
   useEffect(() => { document.title = "WordFuse"; }, []);
 
-  const today = getTodayEST();
+  // FIX 3: Use useState so `today` is computed once at mount and never changes.
+  // Previously `const today = getTodayEST()` recomputed every render, causing
+  // the puzzle-loading useEffect (which had `today` as a dependency) to re-fire
+  // at midnight, resetting an in-progress game.
+  const [today] = useState(() => getTodayEST());
 
   const [lightMode, setLightMode] = useState(() => localStorage.getItem("wl_light_mode") !== "false");
   const [timerEnabled, setTimerEnabled] = useState(() => localStorage.getItem("wl_timer_enabled") === "true");
@@ -800,7 +803,6 @@ export default function WordLinkGame() {
       const uid = getUserId();
       const { data: results } = await supabase.from("game_results").select("puzzle_date").eq("user_id", uid).eq("completed", true);
       const remoteWins = (results || []).map(r => r.puzzle_date).filter(Boolean);
-      // Also check localStorage for any wins recorded this session (handles timing gaps)
       const localWins = Object.keys(localStorage)
         .filter(k => k.startsWith("wl_played_"))
         .map(k => {
@@ -814,7 +816,6 @@ export default function WordLinkGame() {
       setCompletedDates(new Set([...remoteWins, ...localWins]));
     } catch (_) {
       setArchivedDates([]);
-      // Fall back to localStorage only
       const localWins = Object.keys(localStorage)
         .filter(k => k.startsWith("wl_played_"))
         .map(k => {
@@ -933,14 +934,12 @@ export default function WordLinkGame() {
     const finalTimeLeft = overrides.timeLeft ?? timeLeft;
     const finalHintLetters = overrides.hintLetters ?? hintLetters;
 
-    // Compute elapsed time — use countdown remainder if timer on, wall-clock if timer off
     const timerElapsed = TOTAL_TIME - finalTimeLeft;
     const wallElapsed = gameStartTimeRef.current
       ? Math.round((Date.now() - gameStartTimeRef.current) / 1000)
       : 0;
     const timeTaken = timerEnabled ? timerElapsed : wallElapsed;
 
-    // Save to localStorage for all dates (used to show completion in archive)
     localStorage.setItem(`wl_played_${activeDate}`, JSON.stringify({
       completed: finalCompleted, wrongGuesses: finalWrongGuesses,
       timeLeft: finalTimeLeft, hintLetters: finalHintLetters, gameStatus: status,
@@ -995,23 +994,20 @@ export default function WordLinkGame() {
       const newWPR = wrongPerRound.map((w, i) => i === roundIdx ? w + 1 : w);
       setWrongPerRound(newWPR);
       const totalNext = wrongGuesses + 1;
-      const roundWrong = newWPR[roundIdx]; // 1, 2, or 3 wrongs on this round
+      const roundWrong = newWPR[roundIdx];
       const isLosing = totalNext >= MAX_WRONG;
 
       if (roundWrong === 1 && !isLosing) {
-        // First wrong: reveal before/after position indicators from puzzle data
         const positions = puzzle.rounds[roundIdx].positions ?? [];
         setDirectionHints(d => d.map((v, i) => i === roundIdx ? positions : v));
         setErrorMsgs(e => e.map((m, i) => i === roundIdx ? "Hint: see position arrows on each word" : m));
       } else if (roundWrong === 2 && !isLosing) {
-        // Second wrong: reveal 1st letter
         const rev = answer.slice(0, 1).toUpperCase();
         setHintLetters(h => h.map((l, i) => i === roundIdx ? rev : l));
         setGuesses(g => g.map((v, i) => i === roundIdx ? rev.toLowerCase() : v));
         setErrorMsgs(e => e.map((m, i) => i === roundIdx ? `Hint: starts with "${rev}"` : m));
         setTimeout(() => focusLetter(roundIdx, Math.min(1, answer.length - 1)), 10);
       } else if (roundWrong === 3 && !isLosing) {
-        // Third wrong: reveal 2nd letter
         const rev = answer.slice(0, 2).toUpperCase();
         setHintLetters(h => h.map((l, i) => i === roundIdx ? rev : l));
         setGuesses(g => g.map((v, i) => i === roundIdx ? rev.toLowerCase() : v));
@@ -1089,7 +1085,6 @@ export default function WordLinkGame() {
   const goHome = useCallback(() => {
     setShowArchiveModal(false);
     if (activeDate !== today) setActiveDate(today);
-    // Always clear any ?date= param from the URL so refresh lands on today
     const url = new URL(window.location.href);
     url.searchParams.delete("date");
     window.history.replaceState({}, "", url);
