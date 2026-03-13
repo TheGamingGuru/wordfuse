@@ -133,7 +133,7 @@ const css = `
     position: sticky; top: 0; z-index: 20; width: 100%;
     display: flex; justify-content: center;
     /* FIX 2: removed margin-bottom: 20px and bottom padding that were causing gap between header and HUD */
-    padding: 8px 0 0; margin-bottom: 0;
+    padding: 8px 0 8px; margin-bottom: 0;
     background: var(--header-bg-top);
     backdrop-filter: blur(8px);
     border-bottom: 1px solid rgba(46,42,69,0.45);
@@ -236,10 +236,10 @@ const css = `
   /* HUD */
   .wl-hud { width: 100%; max-width: 560px; display: grid; gap: 10px; margin: 0 auto 12px; }
   .wl-hud-sticky {
-    width: 100%; position: sticky; top: 70px; z-index: 15;
+    width: 100%; position: sticky; top: 44px; z-index: 15;
     display: flex; flex-direction: column; align-items: center;
     background: linear-gradient(to bottom, var(--hud-bg-top) 0%, var(--hud-bg-top) 80%, rgba(0,0,0,0) 100%);
-    padding-top: 8px;
+    padding-top: 0;
     padding-bottom: 28px;
   }
   .wl-hud-cell { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; display: flex; flex-direction: column; gap: 2px; }
