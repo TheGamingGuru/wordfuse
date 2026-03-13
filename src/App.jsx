@@ -237,11 +237,11 @@ const css = `
   .wl-nav-divider { height: 1px; background: var(--border); margin: 8px 20px; }
 
   /* HUD */
-  .wl-hud { width: 100%; max-width: 560px; display: grid; gap: 10px; margin: 0 auto 12px; }
+  .wl-hud { width: 100%; max-width: 560px; display: grid; gap: 10px; margin: 0 auto; }
   .wl-hud-sticky {
     width: 100%;
     display: flex; flex-direction: column; align-items: center;
-    padding: 10px 16px 16px;
+    padding: 10px 16px 0;
   }
   .wl-hud-cell { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; display: flex; flex-direction: column; gap: 2px; }
   .wl-hud-label { font-family: var(--font-mono); font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-muted); }
@@ -1176,10 +1176,11 @@ export default function WordLinkGame() {
               </div>
             </div>
             {timerEnabled && (
-              <div className="wl-timer-bar-wrap">
+              <div className="wl-timer-bar-wrap" style={{ marginTop: 8, marginBottom: 10 }}>
                 <div className={`wl-timer-bar ${isLow ? "low" : ""}`} style={{ width: `${timerPct}%` }} />
               </div>
             )}
+            {!timerEnabled && <div style={{ height: 10 }} />}
           </div>
         )}
         </div>{/* ── END STICKY TOP ── */}
