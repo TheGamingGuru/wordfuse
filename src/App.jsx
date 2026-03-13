@@ -129,15 +129,18 @@ const css = `
   }
 
   /* HEADER */
-  .wl-header-wrap {
+  .wl-sticky-top {
     position: sticky; top: 0; z-index: 20; width: 100%;
-    display: flex; justify-content: center;
-    /* FIX 2: removed margin-bottom: 20px and bottom padding that were causing gap between header and HUD */
-    padding: 8px 0 8px; margin-bottom: 0;
     background: var(--header-bg-top);
     backdrop-filter: blur(8px);
+  }
+  .wl-header-wrap {
+    width: 100%;
+    display: flex; justify-content: center;
+    padding: 8px 0 8px;
     border-bottom: 1px solid rgba(46,42,69,0.45);
   }
+  .wl-light .wl-sticky-top { background: var(--header-bg-top); }
   .wl-light .wl-header-wrap { border-bottom-color: rgba(213,207,194,0.6); }
   .wl-header { width: 100%; max-width: 560px; display: flex; justify-content: space-between; align-items: center; }
   .wl-logo {
@@ -236,11 +239,9 @@ const css = `
   /* HUD */
   .wl-hud { width: 100%; max-width: 560px; display: grid; gap: 10px; margin: 0 auto 12px; }
   .wl-hud-sticky {
-    width: 100%; position: sticky; top: 44px; z-index: 15;
+    width: 100%;
     display: flex; flex-direction: column; align-items: center;
-    background: linear-gradient(to bottom, var(--hud-bg-top) 0%, var(--hud-bg-top) 80%, rgba(0,0,0,0) 100%);
-    padding-top: 0;
-    padding-bottom: 28px;
+    padding: 10px 16px 16px;
   }
   .wl-hud-cell { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; display: flex; flex-direction: column; gap: 2px; }
   .wl-hud-label { font-family: var(--font-mono); font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-muted); }
@@ -1112,6 +1113,8 @@ export default function WordLinkGame() {
       <style>{css}</style>
       <div className={rootClass}>
 
+        {/* ── STICKY TOP (header + HUD) ── */}
+        <div className="wl-sticky-top">
         {/* ── HEADER ── */}
         <div className="wl-header-wrap">
           <header className="wl-header">
@@ -1149,6 +1152,38 @@ export default function WordLinkGame() {
           </header>
         </div>
 
+        {/* ── HUD (inside sticky container) ── */}
+        {screen === "game" && (
+          <div className="wl-hud-sticky">
+            <div className="wl-hud" style={{ gridTemplateColumns: timerEnabled ? "1fr 1fr 1fr" : "1fr 1fr", maxWidth: timerEnabled ? 560 : 380 }}>
+              {timerEnabled && (
+              <div className="wl-hud-cell">
+                <div className="wl-hud-label">Time</div>
+                <div className={`wl-hud-value ${isLow ? "danger" : timeLeft < 60 ? "warning" : ""}`}>{formatTime(timeLeft)}</div>
+              </div>
+              )}
+              <div className="wl-hud-cell">
+                <div className="wl-hud-label">Wrong</div>
+                <div className={`wl-hud-value ${wrongDanger ? "danger" : wrongGuesses > 0 ? "warning" : ""}`}>
+                  {wrongGuesses}<span style={{ fontSize: 14, color: "var(--text-muted)" }}>/{MAX_WRONG}</span>
+                </div>
+              </div>
+              <div className="wl-hud-cell">
+                <div className="wl-hud-label">Solved</div>
+                <div className="wl-hud-value">
+                  {completed.filter(Boolean).length}<span style={{ fontSize: 14, color: "var(--text-muted)" }}>/4</span>
+                </div>
+              </div>
+            </div>
+            {timerEnabled && (
+              <div className="wl-timer-bar-wrap">
+                <div className={`wl-timer-bar ${isLow ? "low" : ""}`} style={{ width: `${timerPct}%` }} />
+              </div>
+            )}
+          </div>
+        )}
+        </div>{/* ── END STICKY TOP ── */}
+
         {archiveMsg && (
           <div className="wl-date" style={{ marginBottom: 12, maxWidth: 560, width: "100%", color: "var(--accent2)" }}>
             {archiveMsg}
@@ -1179,36 +1214,7 @@ export default function WordLinkGame() {
           </div>
         )}
 
-        {/* ── HUD ── */}
-        {screen === "game" && (
-          <div className="wl-hud-sticky">
-            <div className="wl-hud" style={{ gridTemplateColumns: timerEnabled ? "1fr 1fr 1fr" : "1fr 1fr", maxWidth: timerEnabled ? 560 : 380 }}>
-              {timerEnabled && (
-              <div className="wl-hud-cell">
-                <div className="wl-hud-label">Time</div>
-                <div className={`wl-hud-value ${isLow ? "danger" : timeLeft < 60 ? "warning" : ""}`}>{formatTime(timeLeft)}</div>
-              </div>
-              )}
-              <div className="wl-hud-cell">
-                <div className="wl-hud-label">Wrong</div>
-                <div className={`wl-hud-value ${wrongDanger ? "danger" : wrongGuesses > 0 ? "warning" : ""}`}>
-                  {wrongGuesses}<span style={{ fontSize: 14, color: "var(--text-muted)" }}>/{MAX_WRONG}</span>
-                </div>
-              </div>
-              <div className="wl-hud-cell">
-                <div className="wl-hud-label">Solved</div>
-                <div className="wl-hud-value">
-                  {completed.filter(Boolean).length}<span style={{ fontSize: 14, color: "var(--text-muted)" }}>/4</span>
-                </div>
-              </div>
-            </div>
-            {timerEnabled && (
-              <div className="wl-timer-bar-wrap">
-                <div className={`wl-timer-bar ${isLow ? "low" : ""}`} style={{ width: `${timerPct}%` }} />
-              </div>
-            )}
-          </div>
-        )}
+        {/* ── HUD placeholder removed – now inside sticky top ── */}
 
         {/* ── ROUNDS ── */}
         {screen === "game" && (
