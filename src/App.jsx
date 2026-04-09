@@ -116,6 +116,7 @@ const css = `
   .wl-root {
     min-height: 100vh; width: 100%;
     display: flex; flex-direction: column; align-items: center;
+    /* FIX 1: removed 24px top padding that was causing whitespace above the sticky header */
     padding: 0 16px 48px;
     background: var(--bg);
     background-image: radial-gradient(ellipse at 20% 0%, #1e1540 0%, transparent 60%),
@@ -414,7 +415,6 @@ const css = `
   .wl-cal-cell.today { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface2)); }
   .wl-cal-cell.completed { border-color: var(--green); background: color-mix(in srgb, var(--green) 10%, var(--surface2)); }
   .wl-light .wl-cal-cell.completed { background: color-mix(in srgb, var(--green) 16%, var(--surface2)); }
-  .wl-cal-cell.played-lost { border-color: var(--accent2); background: color-mix(in srgb, var(--accent2) 8%, var(--surface2)); }
   .wl-cal-cell.today:hover { border-color: var(--accent); }
   .wl-cal-cell-day { font-family: var(--font-mono); font-size: 9px; color: var(--text-muted); position: absolute; top: 5px; right: 6px; }
   .wl-cal-cell-num { font-family: var(--font-mono); font-size: 11px; font-weight: 500; color: var(--accent); letter-spacing: 0.5px; }
@@ -597,25 +597,22 @@ const ResultsModal = ({ gameStatus, timeTaken, wrongGuesses, completed, stats, p
 };
 
 // ─── CALENDAR ARCHIVE ─────────────────────────────────────────────────────────
-const CalendarArchive = ({ archivedDates, loadingArchiveDates, today, playedDates, onSelectDate, onClose }) => {
+const CalendarArchive = ({ archivedDates, loadingArchiveDates, today, completedDates, onSelectDate, onClose }) => {
   // Build a map of date → puzzle number (sorted ascending = #1 is earliest)
   const sortedDates = [...archivedDates].sort((a, b) => a < b ? -1 : 1);
   const puzzleNumbers = Object.fromEntries(sortedDates.map((d, i) => [d, i + 1]));
 
   const todayYM = today.slice(0, 7); // "YYYY-MM"
   const [viewYM, setViewYM] = useState(() => {
-    // Default to this month, but if today has no puzzles show the last month with puzzles
     return todayYM;
   });
 
   const [viewYear, viewMonthIdx] = viewYM.split("-").map(Number);
-  // viewMonthIdx is 1-indexed
 
   const firstDayOfMonth = new Date(viewYear, viewMonthIdx - 1, 1);
   const daysInMonth = new Date(viewYear, viewMonthIdx, 0).getDate();
-  const startDow = firstDayOfMonth.getDay(); // 0=Sun
+  const startDow = firstDayOfMonth.getDay();
 
-  // All dates in this month that have puzzles
   const monthPrefix = viewYM;
   const monthDates = new Set(archivedDates.filter(d => d.startsWith(monthPrefix)));
 
@@ -667,7 +664,7 @@ const CalendarArchive = ({ archivedDates, loadingArchiveDates, today, playedDate
                 const hasPuzzle = monthDates.has(iso);
                 const isFuture = iso > today;
                 const isToday = iso === today;
-                const playedStatus = playedDates[iso]; // "won", "lost", or undefined
+                const isDone = completedDates.has(iso);
                 const pNum = puzzleNumbers[iso];
 
                 if (!hasPuzzle || isFuture) {
@@ -681,19 +678,17 @@ const CalendarArchive = ({ archivedDates, loadingArchiveDates, today, playedDate
                 return (
                   <button
                     key={iso}
-                    className={`wl-cal-cell ${isToday ? "today" : ""} ${playedStatus === "won" ? "completed" : ""} ${playedStatus === "lost" ? "played-lost" : ""}`}
+                    className={`wl-cal-cell ${isToday ? "today" : ""} ${isDone ? "completed" : ""}`}
                     onClick={() => onSelectDate(iso)}
                     aria-label={`Puzzle #${pNum} — ${iso}`}
                   >
                     <div className="wl-cal-cell-day">{day}</div>
                     <div className="wl-cal-cell-num">#{pNum}</div>
-                    {playedStatus === "won"
+                    {isDone
                       ? <div className="wl-cal-cell-check">✓</div>
-                      : playedStatus === "lost"
-                        ? <div className="wl-cal-cell-check" style={{ color: "var(--accent2)" }}>✗</div>
-                        : isToday
-                          ? <div className="wl-cal-cell-today-label">Today</div>
-                          : null
+                      : isToday
+                        ? <div className="wl-cal-cell-today-label">Today</div>
+                        : null
                     }
                   </button>
                 );
@@ -723,7 +718,10 @@ export default function WordLinkGame() {
 
   useEffect(() => { document.title = "WordFuse"; }, []);
 
-  // Use useState so today is computed once at mount and never changes mid-session
+  // FIX 3: Use useState so `today` is computed once at mount and never changes.
+  // Previously `const today = getTodayEST()` recomputed every render, causing
+  // the puzzle-loading useEffect (which had `today` as a dependency) to re-fire
+  // at midnight, resetting an in-progress game.
   const [today] = useState(() => getTodayEST());
 
   const [lightMode, setLightMode] = useState(() => localStorage.getItem("wl_light_mode") !== "false");
@@ -759,21 +757,6 @@ export default function WordLinkGame() {
   const [archivedDates, setArchivedDates] = useState([]);
   const [loadingArchiveDates, setLoadingArchiveDates] = useState(false);
   const [completedDates, setCompletedDates] = useState(new Set());
-  const [playedDates, setPlayedDates] = useState(() => {
-    // Pre-populate from localStorage on mount so calendar is always current
-    const map = {};
-    Object.keys(localStorage)
-      .filter(k => k.startsWith("wl_played_"))
-      .forEach(k => {
-        try {
-          const saved = JSON.parse(localStorage.getItem(k));
-          if (saved?.gameStatus === "won" || saved?.gameStatus === "lost") {
-            map[k.replace("wl_played_", "")] = saved.gameStatus;
-          }
-        } catch (_) {}
-      });
-    return map;
-  });
   const [hintLetters, setHintLetters] = useState(["", "", "", ""]);
   const [wrongPerRound, setWrongPerRound] = useState([0, 0, 0, 0]);
   const [activeRoundIdx, setActiveRoundIdx] = useState(0);
@@ -827,7 +810,7 @@ export default function WordLinkGame() {
 
   const useHint = useCallback((roundIdx) => {
     if (hintsUsed >= 2 || directionHints[roundIdx] !== null) return;
-    const positions = puzzle?.rounds[roundIdx].positions ?? [];
+    const positions = puzzle.rounds[roundIdx].positions ?? [];
     setDirectionHints(d => d.map((v, i) => i === roundIdx ? positions : v));
     setHintsUsed(h => h + 1);
   }, [hintsUsed, directionHints, puzzle]);
@@ -839,46 +822,31 @@ export default function WordLinkGame() {
       const { data: puzzleDates } = await supabase.from("puzzles").select("puzzle_date").lte("puzzle_date", today).order("puzzle_date", { ascending: false });
       setArchivedDates((puzzleDates || []).map(r => r.puzzle_date).filter(Boolean));
       const uid = getUserId();
-      // Fetch all game results (wins and losses) from Supabase
-      const { data: results } = await supabase.from("game_results").select("puzzle_date, completed").eq("user_id", uid);
-      const remoteMap = {};
-      (results || []).forEach(r => {
-        if (r.puzzle_date) remoteMap[r.puzzle_date] = r.completed ? "won" : "lost";
-      });
-      // Merge with localStorage (localStorage wins for recency — handles timing gaps after just finishing)
-      const localMap = {};
-      Object.keys(localStorage)
+      const { data: results } = await supabase.from("game_results").select("puzzle_date").eq("user_id", uid).eq("completed", true);
+      const remoteWins = (results || []).map(r => r.puzzle_date).filter(Boolean);
+      const localWins = Object.keys(localStorage)
         .filter(k => k.startsWith("wl_played_"))
-        .forEach(k => {
+        .map(k => {
           try {
             const saved = JSON.parse(localStorage.getItem(k));
             const date = k.replace("wl_played_", "");
-            if (saved?.gameStatus === "won" || saved?.gameStatus === "lost") {
-              localMap[date] = saved.gameStatus;
-            }
-          } catch (_) {}
-        });
-      const merged = { ...remoteMap, ...localMap };
-      setPlayedDates(merged);
-      // completedDates (wins only) still used for the green cell class
-      setCompletedDates(new Set(Object.entries(merged).filter(([, v]) => v === "won").map(([k]) => k)));
+            return saved?.gameStatus === "won" ? date : null;
+          } catch (_) { return null; }
+        })
+        .filter(Boolean);
+      setCompletedDates(new Set([...remoteWins, ...localWins]));
     } catch (_) {
       setArchivedDates([]);
-      // Fall back to localStorage only
-      const localMap = {};
-      Object.keys(localStorage)
+      const localWins = Object.keys(localStorage)
         .filter(k => k.startsWith("wl_played_"))
-        .forEach(k => {
+        .map(k => {
           try {
             const saved = JSON.parse(localStorage.getItem(k));
-            const date = k.replace("wl_played_", "");
-            if (saved?.gameStatus === "won" || saved?.gameStatus === "lost") {
-              localMap[date] = saved.gameStatus;
-            }
-          } catch (_) {}
-        });
-      setPlayedDates(localMap);
-      setCompletedDates(new Set(Object.entries(localMap).filter(([, v]) => v === "won").map(([k]) => k)));
+            return saved?.gameStatus === "won" ? k.replace("wl_played_", "") : null;
+          } catch (_) { return null; }
+        })
+        .filter(Boolean);
+      setCompletedDates(new Set(localWins));
     } finally {
       setLoadingArchiveDates(false);
     }
@@ -988,22 +956,18 @@ export default function WordLinkGame() {
     const finalTimeLeft = overrides.timeLeft ?? timeLeft;
     const finalHintLetters = overrides.hintLetters ?? hintLetters;
 
-    // Compute elapsed time — use countdown remainder if timer on, wall-clock if timer off
     const timerElapsed = TOTAL_TIME - finalTimeLeft;
     const wallElapsed = gameStartTimeRef.current
       ? Math.round((Date.now() - gameStartTimeRef.current) / 1000)
       : 0;
     const timeTaken = timerEnabled ? timerElapsed : wallElapsed;
 
-    // Save to localStorage for all dates (used to show completion in archive)
     localStorage.setItem(`wl_played_${activeDate}`, JSON.stringify({
       completed: finalCompleted, wrongGuesses: finalWrongGuesses,
       timeLeft: finalTimeLeft, hintLetters: finalHintLetters, gameStatus: status,
       timeTaken, directionHints, hintsUsed,
     }));
     setTimeTaken(timeTaken);
-    // Update playedDates immediately so archive calendar reflects result without needing a reload
-    setPlayedDates(prev => ({ ...prev, [activeDate]: status }));
 
     const uid = getUserId();
     const isWin = status === "won";
@@ -1052,18 +1016,16 @@ export default function WordLinkGame() {
       const newWPR = wrongPerRound.map((w, i) => i === roundIdx ? w + 1 : w);
       setWrongPerRound(newWPR);
       const totalNext = wrongGuesses + 1;
-      const roundWrong = newWPR[roundIdx]; // 1, 2, or 3 wrongs on this round
+      const roundWrong = newWPR[roundIdx];
       const isLosing = totalNext >= MAX_WRONG;
 
       if (roundWrong === 1 && !isLosing) {
-        // First wrong: reveal 1st letter
         const rev = answer.slice(0, 1).toUpperCase();
         setHintLetters(h => h.map((l, i) => i === roundIdx ? rev : l));
         setGuesses(g => g.map((v, i) => i === roundIdx ? rev.toLowerCase() : v));
         setErrorMsgs(e => e.map((m, i) => i === roundIdx ? `Hint: starts with "${rev}"` : m));
         setTimeout(() => focusLetter(roundIdx, Math.min(1, answer.length - 1)), 10);
       } else if (roundWrong === 2 && !isLosing) {
-        // Second wrong: reveal 2nd letter
         const rev = answer.slice(0, 2).toUpperCase();
         setHintLetters(h => h.map((l, i) => i === roundIdx ? rev : l));
         setGuesses(g => g.map((v, i) => i === roundIdx ? rev.toLowerCase() : v));
@@ -1141,7 +1103,6 @@ export default function WordLinkGame() {
   const goHome = useCallback(() => {
     setShowArchiveModal(false);
     if (activeDate !== today) setActiveDate(today);
-    // Always clear any ?date= param from the URL so refresh lands on today
     const url = new URL(window.location.href);
     url.searchParams.delete("date");
     window.history.replaceState({}, "", url);
@@ -1270,6 +1231,8 @@ export default function WordLinkGame() {
             </button>
           </div>
         )}
+
+        {/* ── HUD placeholder removed – now inside sticky top ── */}
 
         {/* ── ROUNDS ── */}
         {screen === "game" && (
@@ -1400,7 +1363,7 @@ export default function WordLinkGame() {
             archivedDates={archivedDates}
             loadingArchiveDates={loadingArchiveDates}
             today={today}
-            playedDates={playedDates}
+            completedDates={completedDates}
             onSelectDate={date => { setShowArchiveModal(false); gameStartTimeRef.current = Date.now(); setScreen("game"); setActiveDate(date); }}
             onClose={() => setShowArchiveModal(false)}
           />
